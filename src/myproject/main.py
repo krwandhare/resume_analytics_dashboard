@@ -1,16 +1,15 @@
 import streamlit as st
-from myproject.analytics import generate_analytics
-from supabase import create_client, Client
-import os
-import time
-import pandas as pd
+from dotenv import load_dotenv
 
-# Initialize Supabase client
-@st.cache_resource
-def init_supabase():
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_KEY")
-    return create_client(url, key)
+# Load environment variables from .env file
+load_dotenv()
+
+from myproject.data_loader import load_job_data, load_historical_data, unify_job_statuses
+from myproject.components.sidebar import render_sidebar
+from myproject.components.overview import render_overview
+from myproject.components.insights import render_insights
+from myproject.components.data_manager import render_data_manager
+from myproject.analytics import generate_analytics
 
 def main():
     st.set_page_config(
@@ -18,77 +17,74 @@ def main():
         layout="wide",
         page_icon="📊"
     )
-    
-    # Sidebar
+
+    # Fetch and sanitize data
+    with st.spinner("Fetching job data..."):
+        job_data, is_live, status_msg = load_job_data()
+        apps_df, events_df = load_historical_data(job_data)
+        
+        # Unify statuses across dashboard
+        job_data = unify_job_statuses(job_data, apps_df)
+
+    # Sidebar setup & filtering
+    filtered_data, company_filter, status_filter = render_sidebar(job_data)
+
     with st.sidebar:
-        st.title("📊 Resume Analytics")
-        st.markdown("""
-        **Resume analytics** powered by Supabase data.
-        """)
+        with st.expander("📚 Job Hunting Playbook", expanded=False):
+            st.markdown("""
+            **Data-Driven Job Hunting**
+            
+            **ATS Match Score:** A percentage score predicting your likelihood to pass Automated Tracking Systems. >80% is ideal.
+            
+            **Tailoring:** Customize your resume keywords for each application using the AI tips provided in the Details tab.
+            
+            **Funnel:** Track your applications from "Applied" to "Interviewing". If your drop-off is high, reconsider your application strategy.
+            """)
+
+    # Main content header
+    st.title("Job Intelligence Dashboard")
+    st.markdown("Track your job search progress, analyze your match scores, and monitor interview conversions in real-time.")
+
+    # Display subtle status indicator
+    if is_live:
+        st.caption(f"🟢 {status_msg} Showing {len(filtered_data)} of {len(job_data)} jobs.")
+    else:
+        st.caption(f"🟡 {status_msg}")
+
+    # Tabs navigation
+    st.write("")
+    st.divider()
+    
+    if len(filtered_data) == 0:
+        with st.container():
+            st.info("👋 **Welcome to Resume Analytics!**")
+            st.markdown("""
+            Here is how this tool helps you land interviews:
+            1. **Track** your applications.
+            2. **Analyze** your AI Match Score for each job.
+            3. **Improve** your resume with coaching tips.
+            """)
+            st.button("➕ Add Your First Job", on_click=lambda: st.success("Feature coming soon!"))
+    else:
+        st.markdown("## 📊 Overview")
+        render_overview(filtered_data, events_df, apps_df)
+
+        st.divider()
+        st.markdown("## 📈 Visual Analytics")
+        generate_analytics(filtered_data, events_df, apps_df)
+
+        st.divider()
+        st.markdown("## 📝 Details & Insights")
+        render_insights(filtered_data, apps_df)
         
-        st.markdown("---")
-        st.markdown("### Filters")
-        experience_level = st.selectbox(
-            "Experience Level",
-            ["All", "Entry", "Mid", "Senior"]
-        )
-        skills_filter = st.multiselect(
-            "Skills to Highlight",
-            ["Python", "JavaScript", "SQL", "Machine Learning", "Cloud Computing"]
-        )
-        
-        st.markdown("---")
-        st.markdown("Made with ❤️ by Resume Analytics Team")
-    
-    # Main content
-    st.title("Resume Analytics Dashboard")
-    
-    # Initialize Supabase
-    supabase = init_supabase()
-    
-    with st.spinner("Fetching resume data..."):
-        try:
-            start_time = time.time()
-            
-            # Fetch data from Supabase
-            response = supabase.table('resumes').select("*").execute()
-            resume_data = pd.DataFrame(response.data)
-            
-            processing_time = time.time() - start_time
-            st.success(f"Fetched {len(resume_data)} resumes in {processing_time:.2f} seconds!")
-            
-            # Create tabs for different views
-            tab1, tab2, tab3 = st.tabs(["📊 Overview", "📝 Details", "📈 Insights"])
-            
-            with tab1:
-                st.subheader("Resume Overview")
-                col1, col2 = st.columns(2)
-                with col1:
-                    total_experience = resume_data['total_experience'].sum()
-                    st.metric("Total Experience", f"{total_experience} years")
-                    st.metric("Total Resumes", len(resume_data))
-                with col2:
-                    avg_skills = resume_data['skills'].apply(len).mean()
-                    st.metric("Avg Skills Count", f"{avg_skills:.1f}")
-                    st.metric("Total Certifications", resume_data['certifications'].sum())
-                    
-            with tab2:
-                st.subheader("Detailed Analysis")
-                generate_analytics(resume_data)
-                
-            with tab3:
-                st.subheader("Career Insights")
-                st.write("Coming soon...")
-                
-        except Exception as e:
-            st.error(f"Error fetching resume data: {str(e)}")
-            st.exception(e)
-    
+        st.divider()
+        render_data_manager(job_data, apps_df, events_df)
+
     # Footer
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center;">
-        <p>Resume Analytics Dashboard v1.0</p>
+        <p>Resume Analytics Dashboard v1.1 • Robust Data Engine</p>
         <p>© 2026 Resume Analytics Inc. All rights reserved.</p>
     </div>
     """, unsafe_allow_html=True)
