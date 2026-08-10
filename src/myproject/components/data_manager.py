@@ -44,7 +44,7 @@ def render_data_manager(jobs_df: pd.DataFrame, apps_df: pd.DataFrame, events_df:
         edited_df = st.data_editor(
             df_to_edit,
             num_rows="dynamic",
-            use_container_width=True,
+            width="stretch",
             key=editor_key,
             column_config=column_config
         )

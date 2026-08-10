@@ -51,7 +51,7 @@ def render_add_job_form() -> None:
             description = st.text_area("Job Description", placeholder="Paste key responsibilities or requirements...")
             match_analysis = st.text_area("AI Match Notes / Coaching", placeholder="Notes on resume tailoring or interview prep...")
 
-            submit_button = st.form_submit_button("💾 Save Job Application", type="primary", use_container_width=True)
+            submit_button = st.form_submit_button("💾 Save Job Application", type="primary", width="stretch")
 
             if submit_button:
                 if not job_title.strip():

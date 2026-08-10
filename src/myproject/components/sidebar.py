@@ -50,7 +50,7 @@ def render_sidebar(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], List[str]
                 data=csv_data,
                 file_name=f"job_applications_{datetime.date.today().isoformat()}.csv",
                 mime="text/csv",
-                use_container_width=True
+                width="stretch"
             )
 
         st.markdown("---")

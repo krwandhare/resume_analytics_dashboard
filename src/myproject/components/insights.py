@@ -44,7 +44,7 @@ def render_insights(df: pd.DataFrame, apps_df: pd.DataFrame = None) -> None:
                 data=csv_data,
                 file_name="filtered_applications.csv",
                 mime="text/csv",
-                use_container_width=True
+                width="stretch"
             )
 
     st.dataframe(

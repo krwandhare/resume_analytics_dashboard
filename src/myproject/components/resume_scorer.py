@@ -69,7 +69,7 @@ def render_resume_scorer(job_data: pd.DataFrame) -> None:
 
     st.markdown("---")
     
-    if st.button("⚡ Calculate ATS Match Score", type="primary", use_container_width=True):
+    if st.button("⚡ Calculate ATS Match Score", type="primary", width="stretch"):
         if not resume_text.strip():
             st.error("Please upload or paste a resume first.")
             return
