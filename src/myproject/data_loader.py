@@ -261,6 +261,7 @@ def _execute_supabase_query(table_name: str, select_str: str = "*", retries: int
 def load_job_data() -> Tuple[pd.DataFrame, bool, str]:
     """
     Fetch and sanitize job data from Supabase with resilient stream reset recovery.
+    Combines live jobs table and historical job_applications table (400+ records).
     Returns: (DataFrame, is_live_data: bool, status_message: str)
     """
     is_valid, msg = is_valid_supabase_config()
@@ -268,13 +269,37 @@ def load_job_data() -> Tuple[pd.DataFrame, bool, str]:
         return get_mock_job_data(), False, f"Using Demo Data: {msg}"
 
     try:
-        raw_list = _execute_supabase_query('jobs')
-        raw_data = pd.DataFrame(raw_list or [])
+        raw_jobs = _execute_supabase_query('jobs') or []
+        raw_apps = _execute_supabase_query('job_applications') or []
 
-        if raw_data.empty:
-            return get_mock_job_data(), False, "Using Demo Data: Connected to Supabase, but 'jobs' table is currently empty. Add your first job application using the form above!"
+        jobs_df = pd.DataFrame(raw_jobs)
+        apps_df = pd.DataFrame(raw_apps)
 
-        sanitized = sanitize_job_data(raw_data)
+        # Standardize job_applications table columns to match jobs schema
+        if not apps_df.empty:
+            if 'role_title' in apps_df.columns and 'job_title' not in apps_df.columns:
+                apps_df['job_title'] = apps_df['role_title']
+            if 'applied_at' in apps_df.columns and 'posted_at' not in apps_df.columns:
+                apps_df['posted_at'] = apps_df['applied_at']
+            if 'job_posting_url' in apps_df.columns and 'job_url' not in apps_df.columns:
+                apps_df['job_url'] = apps_df['job_posting_url']
+
+        combined_df = pd.DataFrame()
+        if not jobs_df.empty and not apps_df.empty:
+            combined_df = pd.concat([jobs_df, apps_df], ignore_index=True)
+        elif not apps_df.empty:
+            combined_df = apps_df
+        elif not jobs_df.empty:
+            combined_df = jobs_df
+
+        if combined_df.empty:
+            return get_mock_job_data(), False, "Connected to Supabase, but no records found in 'jobs' or 'job_applications' tables."
+
+        # Deduplicate records by company + title if needed
+        if 'company' in combined_df.columns and 'job_title' in combined_df.columns:
+            combined_df = combined_df.drop_duplicates(subset=['company', 'job_title'], keep='first')
+
+        sanitized = sanitize_job_data(combined_df)
         return sanitized, True, f"Connected to Supabase: Showing {len(sanitized)} live job records."
     except Exception as e:
         error_msg = f"Using Demo Data: Unable to reach Supabase database ({str(e)})."
