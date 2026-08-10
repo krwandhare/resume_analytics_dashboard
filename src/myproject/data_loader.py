@@ -58,10 +58,20 @@ DEFAULT_MOCK_DATA = [
     }
 ]
 
+def _get_secret_or_env(key_name: str, default: str = "") -> str:
+    """Helper to fetch secret from Streamlit Cloud st.secrets or os.environ."""
+    try:
+        import streamlit as st
+        if key_name in st.secrets:
+            return str(st.secrets[key_name])
+    except Exception:
+        pass
+    return os.environ.get(key_name, default)
+
 def is_valid_supabase_config() -> Tuple[bool, str]:
     """Verify if Supabase environment variables are present and not default placeholders."""
-    url = os.environ.get("SUPABASE_URL", "")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_ANON_KEY", "")
+    url = _get_secret_or_env("SUPABASE_URL")
+    key = _get_secret_or_env("SUPABASE_SERVICE_ROLE_KEY") or _get_secret_or_env("SUPABASE_ANON_KEY")
 
     if not url or not key:
         return False, "SUPABASE_URL and SUPABASE_KEY environment variables are missing."
@@ -74,8 +84,8 @@ def get_supabase_client() -> Optional[Client]:
     is_valid, _ = is_valid_supabase_config()
     if not is_valid:
         return None
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_ANON_KEY")
+    url = _get_secret_or_env("SUPABASE_URL")
+    key = _get_secret_or_env("SUPABASE_SERVICE_ROLE_KEY") or _get_secret_or_env("SUPABASE_ANON_KEY")
     return create_client(url, key)
 
 def update_job_details(job_id: int, match_analysis: str, description: str) -> bool:
