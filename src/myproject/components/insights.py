@@ -72,29 +72,52 @@ def render_insights(df: pd.DataFrame, apps_df: pd.DataFrame = None) -> None:
             with ic3:
                 st.write(f"**Location:** {selected_job.get('location', 'N/A')}")
 
-            # Lookup Job URL
-            job_url = None
-            if apps_df is not None and not apps_df.empty and 'job_id' in apps_df.columns:
-                app_matches = apps_df[apps_df['job_id'] == selected_job['id']]
-                if not app_matches.empty and 'job_posting_url' in app_matches.columns:
-                    job_url = app_matches.iloc[0]['job_posting_url']
+            # Lookup Gmail Thread ID, Message ID, Job URL, and Evidence Snippet from historical apps
+            gmail_thread_id = None
+            gmail_message_id = None
+            evidence_snippet = None
+            job_url = selected_job.get('job_url')
 
-            # Construct Gmail Search URL
-            query = f"{selected_job['company']} {selected_job['job_title']}"
-            encoded_query = urllib.parse.quote_plus(query)
-            gmail_url = f"https://mail.google.com/mail/u/0/#search/{encoded_query}"
+            if apps_df is not None and not apps_df.empty:
+                app_matches = pd.DataFrame()
+                if 'id' in apps_df.columns:
+                    app_matches = apps_df[apps_df['id'] == selected_job['id']]
+                if app_matches.empty and 'job_id' in apps_df.columns:
+                    app_matches = apps_df[apps_df['job_id'] == selected_job['id']]
+                    
+                if not app_matches.empty:
+                    matched_row = app_matches.iloc[0]
+                    gmail_thread_id = matched_row.get('gmail_thread_id')
+                    gmail_message_id = matched_row.get('gmail_message_id')
+                    evidence_snippet = matched_row.get('evidence_snippet')
+                    if not job_url or pd.isna(job_url):
+                        job_url = matched_row.get('job_posting_url')
 
-            # Render action links
-            links_html = f"""
-            <div style="margin-bottom: 1rem; margin-top: 0.5rem;">
-                <a href="{gmail_url}" target="_blank" style="text-decoration: none; padding: 5px 10px; background-color: #f0f2f6; border-radius: 5px; margin-right: 10px; color: #31333F; font-size: 0.9em; border: 1px solid #e0e0e0;">📧 Search Gmail</a>
-            """
-            if job_url and pd.notna(job_url):
-                links_html += f"""
-                <a href="{job_url}" target="_blank" style="text-decoration: none; padding: 5px 10px; background-color: #f0f2f6; border-radius: 5px; color: #31333F; font-size: 0.9em; border: 1px solid #e0e0e0;">🔗 View Original Job Posting</a>
-                """
-            links_html += "</div>"
-            st.markdown(links_html, unsafe_allow_html=True)
+            # Construct Direct Gmail Link
+            if gmail_thread_id and pd.notna(gmail_thread_id) and str(gmail_thread_id).strip():
+                gmail_url = f"https://mail.google.com/mail/u/0/#all/{str(gmail_thread_id).strip()}"
+                gmail_btn_label = "📧 Open Gmail Thread"
+            elif gmail_message_id and pd.notna(gmail_message_id) and str(gmail_message_id).strip():
+                gmail_url = f"https://mail.google.com/mail/u/0/#search/rfc822msgid%3A{str(gmail_message_id).strip()}"
+                gmail_btn_label = "📧 Open Gmail Message"
+            else:
+                query = f"{selected_job['company']} {selected_job['job_title']}"
+                encoded_query = urllib.parse.quote_plus(query)
+                gmail_url = f"https://mail.google.com/mail/u/0/#search/{encoded_query}"
+                gmail_btn_label = "📧 Search Gmail"
+
+            st.write("") # Spacing
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                st.link_button(gmail_btn_label, gmail_url, type="secondary", width="stretch")
+            with btn_col2:
+                if job_url and pd.notna(job_url) and str(job_url).strip():
+                    st.link_button("🔗 View Original Job Posting", str(job_url).strip(), type="secondary", width="stretch")
+                else:
+                    st.caption("No direct posting URL available.")
+
+            if evidence_snippet and pd.notna(evidence_snippet) and str(evidence_snippet).strip():
+                st.info(f"**✉️ Email Proof / Evidence Snippet:**\n\n\"{evidence_snippet}\"")
 
             # AI Analysis and Coaching Block
             analysis_text = selected_job.get('match_analysis', '')
