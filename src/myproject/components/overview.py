@@ -201,12 +201,16 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 # Deletes
                                 for idx in changes.get("deleted_rows", []):
                                     row = display_df.iloc[idx]
-                                    client.table(row['_source_table']).delete().eq('id', row['_id']).execute()
+                                    if pd.notna(row['_id']):
+                                        target_id = int(row['_id'])
+                                        client.table(row['_source_table']).delete().eq('id', target_id).execute()
 
                                 # Updates
                                 for idx, edits in changes.get("edited_rows", {}).items():
                                     row = display_df.iloc[idx]
                                     source_tbl = row['_source_table']
+                                    if pd.isna(row['_id']): continue
+                                    target_id = int(row['_id'])
                                     
                                     clean_edits = {}
                                     for k, v in edits.items():
@@ -225,7 +229,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                             clean_edits[col] = db_val
 
                                     if clean_edits:
-                                        client.table(source_tbl).update(clean_edits).eq('id', row['_id']).execute()
+                                        client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
                                 
                                 if changes.get("added_rows"):
                                     st.warning("Adding new jobs from this view is not supported. Use the Database Manager. Edits/Deletes were saved.")
@@ -448,7 +452,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             
             # Default Sort: Newest interviews first
             display_df['sort_date'] = pd.to_datetime(display_df['Interview Date'], errors='coerce')
-            display_df = display_df.sort_values('sort_date', ascending=False, na_position='last').drop(columns=['sort_date'])
+            display_df = display_df.sort_values('sort_date', ascending=False, na_position='last').drop(columns=['sort_date']).reset_index(drop=True)
             
             display_df.insert(0, 'Sr No', range(1, len(display_df) + 1))
             
@@ -487,12 +491,17 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 # Deletes
                                 for idx in changes.get("deleted_rows", []):
                                     row = display_df.iloc[idx]
-                                    client.table(row['_source_table']).delete().eq('id', row['_id']).execute()
+                                    if pd.notna(row['_id']):
+                                        target_id = int(row['_id'])
+                                        client.table(row['_source_table']).delete().eq('id', target_id).execute()
 
                                 # Updates
                                 for idx, edits in changes.get("edited_rows", {}).items():
                                     row = display_df.iloc[idx]
                                     source_tbl = row['_source_table']
+
+                                    if pd.isna(row['_id']): continue
+                                    target_id = int(row['_id'])
 
                                     clean_edits = {}
                                     for k, v in edits.items():
@@ -511,7 +520,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                             clean_edits[col] = db_val
 
                                     if clean_edits:
-                                        client.table(source_tbl).update(clean_edits).eq('id', row['_id']).execute()
+                                        client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
 
                                 st.toast("✅ Saved interview changes!")
                                 st.rerun()
