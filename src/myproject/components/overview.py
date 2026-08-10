@@ -398,14 +398,23 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                     raw_date = app.get('interview_date')
                     fmt_date = pd.to_datetime(raw_date).strftime('%Y-%m-%d') if pd.notnull(raw_date) else ''
                     
+                    encoded_query = urllib.parse.quote(f"{company} {role}")
+                    gmail_link = f"https://mail.google.com/mail/u/0/#search/{encoded_query}"
+                    
+                    source_tbl = 'jobs' if not live_job.empty else ('job_application_events' if 'id' in app and pd.notnull(app.get('id')) else 'job_applications')
+                    rec_id = job_row.get('id') if not live_job.empty else app.get('id', app.get('application_id'))
+                    
                     display_rows.append({
+                        '_id': rec_id,
+                        '_source_table': source_tbl,
                         'Company': company,
                         'Role': role,
                         'Status': status,
                         'Round': app.get('round_level', 1),
                         'Interview Date': fmt_date,
                         'Rejection Reason': rejection_reason,
-                        'Job Link': job_link
+                        'Job Link': job_link,
+                        'Gmail': gmail_link
                     })
         
         # 2. Append any live interviews that might not have historical events (e.g. manually added)
@@ -413,18 +422,25 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
         processed_companies = [r['Company'] for r in display_rows]
         for _, job in live_interviews.iterrows():
             company = job.get('company', 'Unknown')
+            role = job.get('job_title', 'Unknown')
             if company not in processed_companies:
                 job_link = job.get('job_url', '')
                 if pd.isna(job_link): job_link = ''
                 
+                encoded_query = urllib.parse.quote(f"{company} {role}")
+                gmail_link = f"https://mail.google.com/mail/u/0/#search/{encoded_query}"
+                
                 display_rows.append({
+                    '_id': job.get('id'),
+                    '_source_table': 'jobs',
                     'Company': company,
-                    'Role': job.get('job_title', 'Unknown'),
+                    'Role': role,
                     'Status': str(job.get('status', 'Unknown')).title(),
                     'Round': 'Manual',
                     'Interview Date': '',
                     'Rejection Reason': '',
-                    'Job Link': job_link
+                    'Job Link': job_link,
+                    'Gmail': gmail_link
                 })
                 
         if display_rows:
@@ -435,17 +451,74 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             display_df = display_df.sort_values('sort_date', ascending=False, na_position='last').drop(columns=['sort_date'])
             
             display_df.insert(0, 'Sr No', range(1, len(display_df) + 1))
-            cols = ['Sr No', 'Company', 'Role', 'Status', 'Round', 'Interview Date', 'Rejection Reason', 'Job Link']
-            display_cols = [c for c in cols if c in display_df.columns]
             
-            st.dataframe(
-                display_df[display_cols],
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "Job Link": st.column_config.LinkColumn("Job Link")
-                }
-            )
+            with st.form("overview_interviews_editor"):
+                st.caption("You can edit and delete interview records directly here. Save changes to sync to Supabase.")
+                edited_df = st.data_editor(
+                    display_df,
+                    hide_index=True,
+                    num_rows="dynamic",
+                    width="stretch",
+                    key="overview_interviews",
+                    column_config={
+                        "_id": None,
+                        "_source_table": None,
+                        "Sr No": st.column_config.NumberColumn(disabled=True),
+                        "Company": st.column_config.TextColumn("Company"),
+                        "Role": st.column_config.TextColumn("Role"),
+                        "Status": st.column_config.SelectboxColumn("Status", options=["Interviewing", "Offer Received", "Hired", "Rejected", "Pending", "Applied"]),
+                        "Round": st.column_config.TextColumn("Round"),
+                        "Interview Date": st.column_config.TextColumn("Interview Date"),
+                        "Rejection Reason": st.column_config.TextColumn("Rejection Reason / Notes"),
+                        "Job Link": st.column_config.LinkColumn("Job Posting", display_text="🔗 View Posting", disabled=True),
+                        "Gmail": st.column_config.LinkColumn("Gmail Search", display_text="📧 Search Gmail", disabled=True)
+                    }
+                )
+                
+                if st.form_submit_button("💾 Save Interview Changes", type="primary"):
+                    changes = st.session_state.get("overview_interviews", {})
+                    if any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
+                        from myproject.data_loader import get_supabase_client
+                        client = get_supabase_client()
+                        if not client:
+                            st.error("Not connected to Supabase.")
+                        else:
+                            try:
+                                # Deletes
+                                for idx in changes.get("deleted_rows", []):
+                                    row = display_df.iloc[idx]
+                                    client.table(row['_source_table']).delete().eq('id', row['_id']).execute()
+
+                                # Updates
+                                for idx, edits in changes.get("edited_rows", {}).items():
+                                    row = display_df.iloc[idx]
+                                    source_tbl = row['_source_table']
+
+                                    clean_edits = {}
+                                    for k, v in edits.items():
+                                        db_val = None if pd.isna(v) else v
+                                        if k == 'Company': clean_edits['company'] = db_val
+                                        elif k == 'Status': clean_edits['status'] = db_val
+                                        elif k == 'Rejection Reason': clean_edits['rejection_reason'] = db_val
+                                        elif k == 'Role':
+                                            col = 'job_title' if source_tbl == 'jobs' else 'role_title'
+                                            clean_edits[col] = db_val
+                                        elif k == 'Job Link':
+                                            col = 'job_url' if source_tbl == 'jobs' else 'job_posting_url'
+                                            clean_edits[col] = db_val
+                                        elif k == 'Interview Date':
+                                            col = 'event_date' if source_tbl == 'job_application_events' else ('first_seen_at' if source_tbl == 'jobs' else 'applied_at')
+                                            clean_edits[col] = db_val
+
+                                    if clean_edits:
+                                        client.table(source_tbl).update(clean_edits).eq('id', row['_id']).execute()
+
+                                st.toast("✅ Saved interview changes!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error saving: {e}")
+                    else:
+                        st.info("No changes to save.")
         else:
             st.info("No Interviewing applications found.")
             
