@@ -62,7 +62,6 @@ h1, h2, h3, h4 {
     border: 1px solid rgba(255, 255, 255, 0.08) !important;
     border-radius: 12px !important;
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
-    padding: 1rem !important;
     margin-bottom: 1rem !important;
 }
 
@@ -89,7 +88,7 @@ h1, h2, h3, h4 {
         padding-left: 0.75rem !important;
         padding-right: 0.75rem !important;
     }
-    .stExpander, [data-testid="stForm"] {
+    [data-testid="stForm"] {
         padding: 0.75rem !important;
         margin-bottom: 0.75rem !important;
     }
