@@ -62,8 +62,20 @@ def _get_secret_or_env(key_name: str, default: str = "") -> str:
     """Helper to fetch secret from Streamlit Cloud st.secrets or os.environ."""
     try:
         import streamlit as st
+        # Direct key lookup (exact or lowercase)
         if key_name in st.secrets:
             return str(st.secrets[key_name])
+        if key_name.lower() in st.secrets:
+            return str(st.secrets[key_name.lower()])
+            
+        # Section lookup [supabase]
+        if "supabase" in st.secrets:
+            sec = st.secrets["supabase"]
+            short_key = key_name.replace("SUPABASE_", "").lower()
+            if short_key in sec:
+                return str(sec[short_key])
+            if key_name.lower() in sec:
+                return str(sec[key_name.lower()])
     except Exception:
         pass
     return os.environ.get(key_name, default)
