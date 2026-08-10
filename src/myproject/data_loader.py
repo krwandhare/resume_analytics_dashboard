@@ -225,9 +225,42 @@ def get_mock_job_data() -> pd.DataFrame:
     """Returns fallback sample job data when Supabase is unconfigured or unreachable."""
     return sanitize_job_data(pd.DataFrame(DEFAULT_MOCK_DATA))
 
+def _execute_supabase_query(table_name: str, select_str: str = "*", retries: int = 3):
+    """Execute Supabase table query with automatic retries for HTTP/2 StreamReset resiliency."""
+    client = get_supabase_client()
+    if not client:
+        return None
+
+    last_err = None
+    for attempt in range(retries):
+        try:
+            res = client.table(table_name).select(select_str).execute()
+            return res.data or []
+        except Exception as e:
+            last_err = e
+            # Brief pause before retry
+            import time
+            time.sleep(0.5 * (attempt + 1))
+
+    # HTTP/1.1 REST Fallback if httpx HTTP/2 stream reset occurs
+    try:
+        import urllib.request
+        import json
+        url = _get_secret_or_env("SUPABASE_URL")
+        key = _get_secret_or_env("SUPABASE_SERVICE_ROLE_KEY") or _get_secret_or_env("SUPABASE_ANON_KEY")
+        endpoint = f"{url.rstrip('/')}/rest/v1/{table_name}?select={select_str}"
+        req = urllib.request.Request(endpoint, headers={
+            "apikey": key,
+            "Authorization": f"Bearer {key}"
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as fallback_err:
+        raise last_err or fallback_err
+
 def load_job_data() -> Tuple[pd.DataFrame, bool, str]:
     """
-    Fetch and sanitize job data from Supabase.
+    Fetch and sanitize job data from Supabase with resilient stream reset recovery.
     Returns: (DataFrame, is_live_data: bool, status_message: str)
     """
     is_valid, msg = is_valid_supabase_config()
@@ -235,20 +268,16 @@ def load_job_data() -> Tuple[pd.DataFrame, bool, str]:
         return get_mock_job_data(), False, f"Using Demo Data: {msg}"
 
     try:
-        supabase = get_supabase_client()
-        if not supabase:
-            return get_mock_job_data(), False, "Using Demo Data: Supabase client init failed."
-
-        response = supabase.table('jobs').select("*").execute()
-        raw_data = pd.DataFrame(response.data or [])
+        raw_list = _execute_supabase_query('jobs')
+        raw_data = pd.DataFrame(raw_list or [])
 
         if raw_data.empty:
-            return get_mock_job_data(), False, "Using Demo Data: Connected to Supabase, but 'jobs' table is empty."
+            return get_mock_job_data(), False, "Using Demo Data: Connected to Supabase, but 'jobs' table is currently empty. Add your first job application using the form above!"
 
         sanitized = sanitize_job_data(raw_data)
-        return sanitized, True, f"Successfully loaded {len(sanitized)} live job records from Supabase."
+        return sanitized, True, f"Connected to Supabase: Showing {len(sanitized)} live job records."
     except Exception as e:
-        error_msg = f"Using Demo Data: Failed to fetch from Supabase ({str(e)})."
+        error_msg = f"Using Demo Data: Unable to reach Supabase database ({str(e)})."
         return get_mock_job_data(), False, error_msg
 
 def fuzzy_match_applications(jobs_df: pd.DataFrame, apps_df: pd.DataFrame) -> pd.DataFrame:
@@ -301,15 +330,11 @@ def load_historical_data(jobs_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFr
         return pd.DataFrame(), pd.DataFrame()
         
     try:
-        supabase = get_supabase_client()
-        if not supabase:
-            return pd.DataFrame(), pd.DataFrame()
+        apps_list = _execute_supabase_query('job_applications')
+        events_list = _execute_supabase_query('job_application_events')
         
-        apps_res = supabase.table('job_applications').select('*').execute()
-        events_res = supabase.table('job_application_events').select('*').execute()
-        
-        apps_df = pd.DataFrame(apps_res.data or [])
-        events_df = pd.DataFrame(events_res.data or [])
+        apps_df = pd.DataFrame(apps_list or [])
+        events_df = pd.DataFrame(events_list or [])
         
         if not apps_df.empty and not jobs_df.empty:
             apps_df = fuzzy_match_applications(jobs_df, apps_df)
