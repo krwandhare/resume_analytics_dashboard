@@ -184,8 +184,8 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                         "Sr No": st.column_config.NumberColumn(disabled=True),
                         "Source": st.column_config.TextColumn(disabled=True),
                         "Match Score": st.column_config.TextColumn(disabled=True),
-                        "Job Link": st.column_config.LinkColumn("Job Link"),
-                        "Gmail": st.column_config.LinkColumn("Gmail Search", display_text="📧 Search Gmail")
+                        "Job Link": st.column_config.LinkColumn("Job Posting", display_text="🔗 View Posting", disabled=True),
+                        "Gmail": st.column_config.LinkColumn("Gmail Search", display_text="📧 Search Gmail", disabled=True)
                     }
                 )
                 
@@ -300,14 +300,20 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 if pd.notnull(raw_date):
                     days_since = (pd.Timestamp.now(tz=pd.to_datetime(raw_date).tz) - pd.to_datetime(raw_date)).days
                 
+                company = app.get('company', 'Unknown')
+                role = app.get('role_title', 'Unknown')
+                encoded_query = urllib.parse.quote(f"{company} {role}")
+                gmail_link = f"https://mail.google.com/mail/u/0/#search/{encoded_query}"
+
                 display_rows.append({
-                    'Company': app.get('company', 'Unknown'),
-                    'Role': app.get('role_title', 'Unknown'),
+                    'Company': company,
+                    'Role': role,
                     'Status': str(app.get('status', 'Unknown')).title(),
                     'Applied Date': fmt_date,
                     'Data Age': format_staleness(raw_date),
                     'Days Since Applied': days_since,
-                    'Job Link': job_link
+                    'Job Link': job_link,
+                    'Gmail': gmail_link
                 })
                 
         if display_rows:
@@ -321,7 +327,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             display_df = display_df.sort_values('numeric_days', ascending=False, na_position='last').drop(columns=['numeric_days'])
             
             display_df.insert(0, 'Sr No', range(1, len(display_df) + 1))
-            cols = ['Sr No', 'Company', 'Role', 'Status', 'Applied Date', 'Data Age', 'Job Link']
+            cols = ['Sr No', 'Company', 'Role', 'Status', 'Applied Date', 'Data Age', 'Job Link', 'Gmail']
             display_cols = [c for c in cols if c in display_df.columns]
             
             # Apply color coding for ghosted rows
@@ -341,7 +347,8 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                         "Data Age",
                         help="Elapsed time since this record was created or last updated (🟢 Fresh < 24h, 🟡 Moderate 1-2d, 🔴 Stale > 2d)"
                     ),
-                    "Job Link": st.column_config.LinkColumn("Job Link")
+                    "Job Link": st.column_config.LinkColumn("Job Posting", display_text="🔗 View Posting"),
+                    "Gmail": st.column_config.LinkColumn("Gmail Search", display_text="📧 Search Gmail")
                 }
             )
         else:
