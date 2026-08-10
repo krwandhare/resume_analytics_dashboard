@@ -21,9 +21,10 @@ def render_insights(df: pd.DataFrame, apps_df: pd.DataFrame = None) -> None:
     # Select columns to display
     display_cols = [c for c in ['job_title', 'company', 'status', 'match_score', 'location', 'posted_at'] if c in df.columns]
 
-    st.write("### Applications Data")
-    search_query = st.text_input("🔍 Quick Search (Title or Company)", "")
-
+    c_search, c_dl = st.columns([3, 1])
+    with c_search:
+        search_query = st.text_input("🔍 Quick Search (Title or Company)", "")
+    
     filtered_view = df.copy()
     if search_query.strip():
         q = search_query.strip().lower()
@@ -32,6 +33,19 @@ def render_insights(df: pd.DataFrame, apps_df: pd.DataFrame = None) -> None:
             filtered_view['company'].astype(str).str.lower().str.contains(q)
         )
         filtered_view = filtered_view[mask]
+
+    with c_dl:
+        st.write("") # Alignment spacing
+        st.write("")
+        if not filtered_view.empty:
+            csv_data = filtered_view.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Export CSV",
+                data=csv_data,
+                file_name="filtered_applications.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
 
     st.dataframe(
         filtered_view[display_cols],

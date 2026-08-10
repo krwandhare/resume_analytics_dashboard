@@ -293,10 +293,52 @@ def load_historical_data(jobs_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFr
                 how='left',
                 suffixes=('', '_app')
             )
+            log_staleness_diagnostics(events_df)
             
         return apps_df, events_df
     except Exception as e:
         return pd.DataFrame(), pd.DataFrame()
+
+def log_staleness_diagnostics(events_df: pd.DataFrame, company_filter: Optional[str] = None) -> None:
+    """Diagnostic logger for application events to trace raw event_date and calculated staleness_days."""
+    if events_df is None or not isinstance(events_df, pd.DataFrame) or events_df.empty or 'company' not in events_df.columns:
+        return
+    
+    if company_filter:
+        mask = events_df['company'].astype(str).str.lower().str.contains(company_filter.lower())
+        target_events = events_df[mask]
+    else:
+        target_events = events_df
+        
+    if target_events.empty:
+        return
+
+    import logging
+    date_col = next((c for c in ['created_at', 'event_date', 'date', 'timestamp'] if c in target_events.columns), None)
+    
+    for idx, row in target_events.iterrows():
+        raw_date = row.get(date_col) if date_col else None
+        formatted_age = format_staleness(raw_date)
+        staleness_days = None
+        
+        if pd.notnull(raw_date):
+            try:
+                dt = pd.to_datetime(raw_date)
+                now = pd.Timestamp.now(tz=dt.tz) if dt.tzinfo is not None else pd.Timestamp.now()
+                staleness_days = (now - dt).total_seconds() / 86400.0
+            except Exception:
+                staleness_days = None
+                
+        days_str = f"{staleness_days:.2f}d" if staleness_days is not None else "N/A"
+        logging.info(
+            f"[DIAGNOSTIC - Event] App ID: {row.get('application_id')}, "
+            f"Company: '{row.get('company')}', Raw Date: '{raw_date}', "
+            f"Staleness Days: {days_str}, Formatted Age: '{formatted_age}'"
+        )
+
+def log_torc_diagnostics(events_df: pd.DataFrame) -> None:
+    """Backwards compatible wrapper for Torc events diagnostic logging."""
+    log_staleness_diagnostics(events_df, company_filter='torc')
 
 def unify_job_statuses(jobs_df: pd.DataFrame, apps_df: pd.DataFrame) -> pd.DataFrame:
     """Unify the status of jobs_df with the true historical status from apps_df."""
@@ -317,3 +359,37 @@ def unify_job_statuses(jobs_df: pd.DataFrame, apps_df: pd.DataFrame) -> pd.DataF
     jobs_df['status'] = jobs_df['status'].astype(str).str.title()
     
     return jobs_df
+
+def format_staleness(raw_value) -> str:
+    """Transform raw timestamps, datetimes, or seconds into clean human-readable data age strings with UI Pro accent tokens."""
+    if pd.isna(raw_value) or raw_value is None or raw_value == '':
+        return "⚪ Unknown"
+    
+    try:
+        if isinstance(raw_value, (int, float)):
+            seconds = float(raw_value)
+        else:
+            dt = pd.to_datetime(raw_value)
+            now = pd.Timestamp.now(tz=dt.tz) if dt.tzinfo is not None else pd.Timestamp.now()
+            seconds = (now - dt).total_seconds()
+        
+        if seconds < 0:
+            seconds = 0
+            
+        mins = int(seconds // 60)
+        hours = int(seconds // 3600)
+        days = int(seconds // 86400)
+        
+        if seconds < 60:
+            return "🟢 Just now"
+        elif mins < 60:
+            return f"🟢 {mins}m ago"
+        elif hours < 24:
+            return f"🟢 {hours}h ago"
+        elif days <= 2:
+            return f"🟡 {days}d old"
+        else:
+            return f"🔴 Stale: {days}d old"
+    except Exception:
+        return "⚪ Unknown"
+

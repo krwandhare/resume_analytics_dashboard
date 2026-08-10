@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+from myproject.data_loader import format_staleness
+
 
 def get_match_label(score):
     try:
@@ -43,46 +45,67 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
     else:
         total_interviews = len(df[df['status'].str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]) if 'status' in df.columns else 0
 
-    # Custom HTML Flexbox KPI Cards
+    # Custom HTML Flexbox KPI Cards (Glassmorphism Dark Aesthetics)
     kpi_html = f"""
     <style>
-    .kpi-container {{ display: flex; gap: 10px; margin-bottom: 20px; }}
-    .kpi-card {{ 
-        flex: 1; padding: 15px; border-radius: 8px; color: white; 
-        text-align: center; font-family: sans-serif;
-    }}
-    .kpi-card .kpi-title {{ font-size: 0.9em; opacity: 0.9; margin-bottom: 5px; }}
-    .kpi-card .kpi-value {{ font-size: 1.8em; font-weight: bold; margin-bottom: 5px; line-height: 1.2; }}
-    .kpi-card .kpi-desc {{ font-size: 0.75em; opacity: 0.8; line-height: 1.2; }}
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@600;700&display=swap');
     
-    .bg-indigo {{ background-color: #6366f1; }}
-    .bg-rose {{ background-color: #f43f5e; }}
-    .bg-amber {{ background-color: #f59e0b; }}
-    .bg-blue {{ background-color: #3b82f6; }}
-    .bg-emerald {{ background-color: #10b981; }}
+    .kpi-container {{ display: flex; gap: 14px; margin-bottom: 24px; flex-wrap: wrap; }}
+    .kpi-card {{ 
+        flex: 1; min-width: 150px; padding: 18px 14px; border-radius: 14px; 
+        background: rgba(30, 41, 59, 0.65);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+        text-align: center; font-family: 'Inter', -apple-system, sans-serif;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+    }}
+    .kpi-card::before {{
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; height: 3px;
+        border-radius: 14px 14px 0 0;
+    }}
+    .kpi-card:hover {{
+        transform: translateY(-5px);
+        border-color: rgba(99, 102, 241, 0.4);
+        box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.5), 0 0 20px 0 rgba(99, 102, 241, 0.2);
+    }}
+    .kpi-card .kpi-title {{ font-size: 0.82em; font-weight: 600; color: #94A3B8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.6px; }}
+    .kpi-card .kpi-value {{ font-size: 2.1em; font-weight: 700; color: #F8FAFC; margin-bottom: 4px; line-height: 1.1; font-family: 'Fira Code', monospace; }}
+    .kpi-card .kpi-desc {{ font-size: 0.76em; color: #64748B; font-weight: 400; }}
+    
+    .kpi-indigo::before {{ background: linear-gradient(90deg, #6366f1, #818cf8); }}
+    .kpi-rose::before {{ background: linear-gradient(90deg, #f43f5e, #fb7185); }}
+    .kpi-amber::before {{ background: linear-gradient(90deg, #f59e0b, #fbbf24); }}
+    .kpi-blue::before {{ background: linear-gradient(90deg, #3b82f6, #60a5fa); }}
+    .kpi-emerald::before {{ background: linear-gradient(90deg, #10b981, #34d399); }}
     </style>
     <div class="kpi-container">
-        <div class="kpi-card bg-indigo">
+        <div class="kpi-card kpi-indigo">
             <div class="kpi-title">📊 Total Jobs</div>
             <div class="kpi-value">{total_tracked}</div>
             <div class="kpi-desc">Tracked in pipeline</div>
         </div>
-        <div class="kpi-card bg-rose">
+        <div class="kpi-card kpi-rose">
             <div class="kpi-title">🎯 Avg Match</div>
             <div class="kpi-value">{avg_match:.1f}%</div>
             <div class="kpi-desc">ATS screen pass rate</div>
         </div>
-        <div class="kpi-card bg-amber">
+        <div class="kpi-card kpi-amber">
             <div class="kpi-title">🏢 Companies</div>
             <div class="kpi-value">{total_companies}</div>
             <div class="kpi-desc">Distinct employers</div>
         </div>
-        <div class="kpi-card bg-blue">
+        <div class="kpi-card kpi-blue">
             <div class="kpi-title">⏳ Active/Pending</div>
             <div class="kpi-value">{pending_count}</div>
             <div class="kpi-desc">Awaiting decision</div>
         </div>
-        <div class="kpi-card bg-emerald">
+        <div class="kpi-card kpi-emerald">
             <div class="kpi-title">🎤 Interviews</div>
             <div class="kpi-value">{total_interviews}</div>
             <div class="kpi-desc">Reached interview stage</div>
@@ -254,6 +277,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 'Role': job.get('job_title', 'Unknown'),
                 'Status': str(job.get('status', 'Unknown')).title(),
                 'Applied Date': fmt_date,
+                'Data Age': format_staleness(raw_date),
                 'Days Since Applied': days_since,
                 'Job Link': job_link
             })
@@ -281,6 +305,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                     'Role': app.get('role_title', 'Unknown'),
                     'Status': str(app.get('status', 'Unknown')).title(),
                     'Applied Date': fmt_date,
+                    'Data Age': format_staleness(raw_date),
                     'Days Since Applied': days_since,
                     'Job Link': job_link
                 })
@@ -289,7 +314,6 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             display_df = pd.DataFrame(display_rows)
             
             # Overwrite Status for ghosted applications
-            # Handle empty strings by converting to numeric and coercing errors to NaN
             display_df['numeric_days'] = pd.to_numeric(display_df['Days Since Applied'], errors='coerce')
             display_df.loc[display_df['numeric_days'] > 20, 'Status'] = 'Ghosted'
             
@@ -297,7 +321,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             display_df = display_df.sort_values('numeric_days', ascending=False, na_position='last').drop(columns=['numeric_days'])
             
             display_df.insert(0, 'Sr No', range(1, len(display_df) + 1))
-            cols = ['Sr No', 'Company', 'Role', 'Status', 'Applied Date', 'Days Since Applied', 'Job Link']
+            cols = ['Sr No', 'Company', 'Role', 'Status', 'Applied Date', 'Data Age', 'Job Link']
             display_cols = [c for c in cols if c in display_df.columns]
             
             # Apply color coding for ghosted rows
@@ -313,6 +337,10 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 hide_index=True,
                 width="stretch",
                 column_config={
+                    "Data Age": st.column_config.TextColumn(
+                        "Data Age",
+                        help="Elapsed time since this record was created or last updated (🟢 Fresh < 24h, 🟡 Moderate 1-2d, 🔴 Stale > 2d)"
+                    ),
                     "Job Link": st.column_config.LinkColumn("Job Link")
                 }
             )
@@ -416,7 +444,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             
     st.markdown("---")
     st.subheader("Recent Activity")
-    st.caption("💡 Deduplicates historical events to show the latest, most actionable status for each application.")
+    st.caption("💡 Deduplicates historical events and groups them by company to show the latest, most actionable status.")
     if events_df is not None and not events_df.empty:
         # Filter options
         filter_option = st.selectbox(
@@ -430,11 +458,14 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
         desc_col = next((c for c in ['description', 'event_type', 'body', 'message', 'type'] if c in events_df.columns), None)
         
         if date_col and desc_col:
-            events_view = events_df.sort_values(by=date_col, ascending=False)
+            events_view = events_df.sort_values(by=date_col, ascending=False).copy()
             
             # Collapse sprawl by keeping only the most recent update per application
             if 'application_id' in events_view.columns:
                 events_view = events_view.drop_duplicates(subset=['application_id'], keep='first')
+            
+            # Normalize company casing for grouping (Rule: Categorical Data Casing)
+            events_view['company_clean'] = events_view['company'].astype(str).str.strip().str.title()
             
             # Apply filter
             if filter_option == "Interviewing Only":
@@ -442,49 +473,63 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             elif filter_option == "Positive Signals Only":
                 events_view = events_view[events_view[desc_col].astype(str).str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]
                 
-            events_view = events_view.head(15)
+            events_view = events_view.head(20)
             
             if events_view.empty:
                 st.info(f"No events match the filter: {filter_option}")
             else:
-                table_data = []
-                for idx, (_, event) in enumerate(events_view.iterrows(), 1):
-                    # Build context string
-                    company = event.get('company', 'Unknown')
-                    role = event.get('role_title', 'Unknown')
-                    raw_status = str(event[desc_col]).lower()
-                    
-                    # Determine Badge
-                    if raw_status == 'interviewing':
-                        badge = "🟢 Interviewing"
-                    elif raw_status in ['rejected', 'rejection']:
-                        badge = "🔴 Rejected"
-                    elif raw_status in ['applied', 'pending']:
-                        badge = "🔵 Applied"
-                    elif raw_status in ['offer', 'offer received']:
-                        badge = "🟡 Offer"
-                    else:
-                        badge = f"⚪ {raw_status.title()}"
-                        
-                    date_val = pd.to_datetime(event[date_col])
-                    now = pd.Timestamp.now('UTC') if date_val.tzinfo is not None else pd.Timestamp.now()
-                    days_ago = (now - date_val).days
-                    staleness = f"⏳ {days_ago}d" if days_ago > 0 else "⏳ Today"
-                    
-                    evidence = event.get('evidence_snippet', '')
-                    if pd.isna(evidence):
-                        evidence = ''
-                        
-                    table_data.append({
-                        "Sr No": idx,
-                        "Staleness": staleness,
-                        "Company": company,
-                        "Role": role,
-                        "Status": badge,
-                        "Notes": evidence
-                    })
+                # Hierarchical pandas groupby by Company
+                grouped_events = events_view.groupby('company_clean', sort=False)
                 
-                st.dataframe(pd.DataFrame(table_data), hide_index=True, width="stretch")
+                for company_name, group in grouped_events:
+                    # Clean Streamlit typography token header for Company
+                    st.markdown(f"#### 🏢 {company_name}")
+                    
+                    group_rows = []
+                    for idx, (_, event) in enumerate(group.iterrows(), 1):
+                        raw_status = str(event[desc_col]).lower()
+                        
+                        # Determine Badge
+                        if raw_status == 'interviewing':
+                            badge = "🟢 Interviewing"
+                        elif raw_status in ['rejected', 'rejection']:
+                            badge = "🔴 Rejected"
+                        elif raw_status in ['applied', 'pending']:
+                            badge = "🔵 Applied"
+                        elif raw_status in ['offer', 'offer received']:
+                            badge = "🟡 Offer"
+                        else:
+                            badge = f"⚪ {raw_status.title()}"
+                            
+                        date_val = event[date_col]
+                        data_age_badge = format_staleness(date_val)
+                        
+                        evidence = event.get('evidence_snippet', '')
+                        if pd.isna(evidence):
+                            evidence = ''
+                            
+                        group_rows.append({
+                            "Sr No": idx,
+                            "Role": str(event.get('role_title', 'Unknown')).title(),
+                            "Status": badge,
+                            "Data Age": data_age_badge,
+                            "Notes": evidence
+                        })
+                    
+                    group_df = pd.DataFrame(group_rows)
+                    st.dataframe(
+                        group_df,
+                        hide_index=True,
+                        width="stretch",
+                        column_config={
+                            "Data Age": st.column_config.TextColumn(
+                                "Data Age",
+                                help="Elapsed time since last activity update"
+                            ),
+                            "Status": st.column_config.TextColumn("Status"),
+                            "Notes": st.column_config.TextColumn("Notes / Evidence")
+                        }
+                    )
         else:
             st.dataframe(events_df.head(10), width="stretch", hide_index=True)
     else:

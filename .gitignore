@@ -2,6 +2,14 @@
 .env
 .env.*
 !.env.example
+auth.json
+credentials.json
+oauth_creds.json
+token.json
+.agent/
+.agents/
+.claude/
+.gemini/
 
 # Python
 .venv/

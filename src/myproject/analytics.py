@@ -111,8 +111,14 @@ def generate_analytics(job_data: pd.DataFrame, events_df: pd.DataFrame = None, a
                 hole=0.4,
                 height=350
             )
-            fig_pie.update_layout(margin=dict(t=20, b=20, l=0, r=0))
-            st.plotly_chart(fig_pie, use_container_width=True)
+            fig_pie.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                margin=dict(t=20, b=20, l=0, r=0),
+                font=dict(family="Inter, sans-serif", color="#F8FAFC")
+            )
+            st.plotly_chart(fig_pie, width="stretch")
             
             with st.expander("💡 Insights: What does this mean?"):
                 st.markdown("""
@@ -165,15 +171,19 @@ def generate_analytics(job_data: pd.DataFrame, events_df: pd.DataFrame = None, a
                 ))
                 
             fig_hist.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
                 barmode='stack',
                 bargap=0.1, 
                 margin=dict(t=20, b=20, l=0, r=0), 
                 legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
                 xaxis_title="Match Score (%)",
                 yaxis_title="count",
-                height=350
+                height=350,
+                font=dict(family="Inter, sans-serif", color="#F8FAFC")
             )
-            st.plotly_chart(fig_hist, use_container_width=True)
+            st.plotly_chart(fig_hist, width="stretch")
         else:
             st.info("Match score data not available for visualization.")
             
@@ -193,8 +203,15 @@ def generate_analytics(job_data: pd.DataFrame, events_df: pd.DataFrame = None, a
                     color_discrete_sequence=['#3B82F6'],
                     height=300
                 )
-                fig_bar.update_layout(yaxis={'categoryorder': 'total ascending'}, margin=dict(t=20, b=20, l=0, r=0))
-                st.plotly_chart(fig_bar, use_container_width=True)
+                fig_bar.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    yaxis={'categoryorder': 'total ascending'}, 
+                    margin=dict(t=20, b=20, l=0, r=0),
+                    font=dict(family="Inter, sans-serif", color="#F8FAFC")
+                )
+                st.plotly_chart(fig_bar, width="stretch")
             else:
                 st.info("Not enough company data to show trends.")
         else:

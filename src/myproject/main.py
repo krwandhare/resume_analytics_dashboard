@@ -9,6 +9,9 @@ from myproject.components.sidebar import render_sidebar
 from myproject.components.overview import render_overview
 from myproject.components.insights import render_insights
 from myproject.components.data_manager import render_data_manager
+from myproject.components.resume_scorer import render_resume_scorer
+from myproject.components.email_webhook_ingestion import render_email_webhook_ingestion
+from myproject.components.add_job_form import render_add_job_form
 from myproject.analytics import generate_analytics
 
 def main():
@@ -17,6 +20,69 @@ def main():
         layout="wide",
         page_icon="📊"
     )
+
+    # Inject Mobile PWA Meta Tags & Glassmorphism Theme
+    st.markdown("""
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <meta name="apple-mobile-web-app-capable" content="yes">
+            <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+            <meta name="apple-mobile-web-app-title" content="Resume Analytics">
+            <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f4ca.png">
+        </head>
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
+        
+        html, body, [class*="st-"] {
+            font-family: 'Inter', -apple-system, sans-serif;
+        }
+
+        h1, h2, h3, h4 {
+            font-family: 'Inter', sans-serif;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        /* Glassmorphism Container styling */
+        .stExpander, [data-testid="stForm"] {
+            background: rgba(30, 41, 59, 0.5) !important;
+            backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 12px !important;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+        }
+
+        /* Header Accent Badge */
+        .header-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(99, 102, 241, 0.2));
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            color: #60A5FA;
+            font-size: 0.8em;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        /* Smooth scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0F172A;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
     # Fetch and sanitize data
     with st.spinner("Fetching job data..."):
@@ -42,14 +108,18 @@ def main():
             """)
 
     # Main content header
+    st.markdown('<span class="header-badge">✨ RESUME ANALYTICS v1.1</span>', unsafe_allow_html=True)
     st.title("Job Intelligence Dashboard")
-    st.markdown("Track your job search progress, analyze your match scores, and monitor interview conversions in real-time.")
+    st.markdown("Track your job search progress, analyze your ATS match scores, and monitor interview conversions in real-time.")
 
     # Display subtle status indicator
     if is_live:
         st.caption(f"🟢 {status_msg} Showing {len(filtered_data)} of {len(job_data)} jobs.")
     else:
         st.caption(f"🟡 {status_msg}")
+
+    # Render Interactive Add New Job Application Form
+    render_add_job_form()
 
     # Tabs navigation
     st.write("")
@@ -77,6 +147,12 @@ def main():
         st.markdown("## 📝 Details & Insights")
         render_insights(filtered_data, apps_df)
         
+        st.divider()
+        render_resume_scorer(filtered_data)
+
+        st.divider()
+        render_email_webhook_ingestion(filtered_data)
+
         st.divider()
         render_data_manager(job_data, apps_df, events_df)
 
