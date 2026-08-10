@@ -93,28 +93,38 @@ def render_insights(df: pd.DataFrame, apps_df: pd.DataFrame = None) -> None:
                     if not job_url or pd.isna(job_url):
                         job_url = matched_row.get('job_posting_url')
 
-            # Construct Direct Gmail Link
+            # Construct Native Gmail App Deep Link & Web Link
             if gmail_thread_id and pd.notna(gmail_thread_id) and str(gmail_thread_id).strip():
-                gmail_url = f"https://mail.google.com/mail/u/0/#all/{str(gmail_thread_id).strip()}"
-                gmail_btn_label = "📧 Open Gmail Thread"
+                tid = str(gmail_thread_id).strip()
+                gmail_web_url = f"https://mail.google.com/mail/u/0/#all/{tid}"
+                gmail_app_url = f"googlegmail:///thread/{tid}"
+                app_btn_label = "📱 Open Native Gmail App"
+                web_btn_label = "🌐 Open Web Gmail"
             elif gmail_message_id and pd.notna(gmail_message_id) and str(gmail_message_id).strip():
-                gmail_url = f"https://mail.google.com/mail/u/0/#search/rfc822msgid%3A{str(gmail_message_id).strip()}"
-                gmail_btn_label = "📧 Open Gmail Message"
+                mid = str(gmail_message_id).strip()
+                gmail_web_url = f"https://mail.google.com/mail/u/0/#search/rfc822msgid%3A{mid}"
+                gmail_app_url = f"googlegmail:///search?q=rfc822msgid%3A{mid}"
+                app_btn_label = "📱 Open Native Gmail App"
+                web_btn_label = "🌐 Open Web Gmail"
             else:
                 query = f"{selected_job['company']} {selected_job['job_title']}"
                 encoded_query = urllib.parse.quote_plus(query)
-                gmail_url = f"https://mail.google.com/mail/u/0/#search/{encoded_query}"
-                gmail_btn_label = "📧 Search Gmail"
+                gmail_web_url = f"https://mail.google.com/mail/u/0/#search/{encoded_query}"
+                gmail_app_url = f"googlegmail:///co?q={encoded_query}"
+                app_btn_label = "📱 Search Native Gmail App"
+                web_btn_label = "🌐 Search Web Gmail"
 
             st.write("") # Spacing
-            btn_col1, btn_col2 = st.columns(2)
+            btn_col1, btn_col2, btn_col3 = st.columns(3)
             with btn_col1:
-                st.link_button(gmail_btn_label, gmail_url, type="secondary", width="stretch")
+                st.link_button(app_btn_label, gmail_app_url, type="primary", width="stretch", help="Opens installed Gmail app on iOS/Android")
             with btn_col2:
+                st.link_button(web_btn_label, gmail_web_url, type="secondary", width="stretch", help="Opens Gmail in browser tab")
+            with btn_col3:
                 if job_url and pd.notna(job_url) and str(job_url).strip():
-                    st.link_button("🔗 View Original Job Posting", str(job_url).strip(), type="secondary", width="stretch")
+                    st.link_button("🔗 Job Posting", str(job_url).strip(), type="secondary", width="stretch", help="Original job application page")
                 else:
-                    st.caption("No direct posting URL available.")
+                    st.caption("No direct posting URL.")
 
             if evidence_snippet and pd.notna(evidence_snippet) and str(evidence_snippet).strip():
                 st.info(f"**✉️ Email Proof / Evidence Snippet:**\n\n\"{evidence_snippet}\"")
