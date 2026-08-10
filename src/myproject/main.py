@@ -32,100 +32,88 @@ def main():
         page_icon="📊"
     )
 
-    # Inject Mobile PWA Meta Tags & Glassmorphism Theme
+    # Inject Mobile PWA Meta Tags
     st.markdown("""
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-            <meta name="apple-mobile-web-app-capable" content="yes">
-            <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-            <meta name="apple-mobile-web-app-title" content="Resume Analytics">
-            <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f4ca.png">
-        </head>
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
-        
-        html, body, [class*="st-"] {
-            font-family: 'Inter', -apple-system, sans-serif;
-        }
-
-        h1, h2, h3, h4 {
-            font-family: 'Inter', sans-serif;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-        }
-
-        /* Glassmorphism Container styling - scoped without overriding inner input controls */
-        .stExpander, [data-testid="stForm"] {
-            background: rgba(30, 41, 59, 0.55) !important;
-            -webkit-backdrop-filter: blur(12px) !important;
-            backdrop-filter: blur(12px) !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
-            border-radius: 12px !important;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
-            padding: 1rem !important;
-            margin-bottom: 1rem !important;
-        }
-
-        /* Header Accent Badge cross-viewport gradient */
-        .header-badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 5px 14px;
-            border-radius: 20px;
-            background: -webkit-linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(99, 102, 241, 0.25)) !important;
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(99, 102, 241, 0.25)) !important;
-            border: 1px solid rgba(96, 165, 250, 0.4);
-            color: #60A5FA !important;
-            font-size: 0.82em;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-            box-shadow: 0 2px 10px rgba(59, 130, 246, 0.15);
-        }
-
-        /* Mobile Viewport Decluttering & Responsive Adjustments */
-        @media (max-width: 768px) {
-            .block-container {
-                padding-top: 1rem !important;
-                padding-bottom: 2rem !important;
-                padding-left: 0.75rem !important;
-                padding-right: 0.75rem !important;
-            }
-            .stExpander, [data-testid="stForm"] {
-                padding: 0.75rem !important;
-                margin-bottom: 0.75rem !important;
-            }
-            h1 {
-                font-size: 1.8rem !important;
-            }
-            h2 {
-                font-size: 1.4rem !important;
-            }
-            h3 {
-                font-size: 1.15rem !important;
-            }
-            [data-testid="stMetricValue"] {
-                font-size: 1.4rem !important;
-            }
-        }
-
-        /* Smooth scrollbars */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #0F172A;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #334155;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #475569;
-        }
-        </style>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-title" content="Resume Analytics">
+        <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f4ca.png">
     """, unsafe_allow_html=True)
+
+    # Inject Custom Glassmorphism & Dark Theme CSS
+    st.markdown("""<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
+
+html, body, [class*="st-"] {
+    font-family: 'Inter', -apple-system, sans-serif;
+}
+
+h1, h2, h3, h4 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.stExpander, [data-testid="stForm"] {
+    background: rgba(30, 41, 59, 0.55) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
+    padding: 1rem !important;
+    margin-bottom: 1rem !important;
+}
+
+.header-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 14px;
+    border-radius: 20px;
+    background: -webkit-linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(99, 102, 241, 0.25)) !important;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(99, 102, 241, 0.25)) !important;
+    border: 1px solid rgba(96, 165, 250, 0.4);
+    color: #60A5FA !important;
+    font-size: 0.82em;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    box-shadow: 0 2px 10px rgba(59, 130, 246, 0.15);
+}
+
+@media (max-width: 768px) {
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 2rem !important;
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+    .stExpander, [data-testid="stForm"] {
+        padding: 0.75rem !important;
+        margin-bottom: 0.75rem !important;
+    }
+    h1 { font-size: 1.8rem !important; }
+    h2 { font-size: 1.4rem !important; }
+    h3 { font-size: 1.15rem !important; }
+    [data-testid="stMetricValue"] { font-size: 1.4rem !important; }
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #0F172A;
+}
+::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+}
+</style>""", unsafe_allow_html=True)
 
     # Fetch and sanitize data
     with st.spinner("Fetching job data..."):
