@@ -411,14 +411,14 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                     display_rows.append({
                         '_id': rec_id,
                         '_source_table': source_tbl,
-                        'Company': company,
-                        'Role': role,
-                        'Status': status,
-                        'Round': app.get('round_level', 1),
-                        'Interview Date': fmt_date,
-                        'Rejection Reason': rejection_reason,
-                        'Job Link': job_link,
-                        'Gmail': gmail_link
+                        'Company': str(company),
+                        'Role': str(role),
+                        'Status': str(status),
+                        'Round': str(app.get('round_level', '1')),
+                        'Interview Date': str(fmt_date),
+                        'Rejection Reason': str(rejection_reason),
+                        'Job Link': str(job_link),
+                        'Gmail': str(gmail_link)
                     })
         
         # 2. Append any live interviews that might not have historical events (e.g. manually added)
@@ -437,14 +437,14 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 display_rows.append({
                     '_id': job.get('id'),
                     '_source_table': 'jobs',
-                    'Company': company,
-                    'Role': role,
+                    'Company': str(company),
+                    'Role': str(role),
                     'Status': str(job.get('status', 'Unknown')).title(),
                     'Round': 'Manual',
                     'Interview Date': '',
                     'Rejection Reason': '',
-                    'Job Link': job_link,
-                    'Gmail': gmail_link
+                    'Job Link': str(job_link),
+                    'Gmail': str(gmail_link)
                 })
                 
         if display_rows:
@@ -457,13 +457,14 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             display_df.insert(0, 'Sr No', range(1, len(display_df) + 1))
             
             with st.form("overview_interviews_editor"):
-                st.caption("You can edit and delete interview records directly here. Save changes to sync to Supabase.")
+                st.caption("Double-click any cell to update status, interview date, or notes. Save changes to sync to Supabase.")
                 edited_df = st.data_editor(
                     display_df,
                     hide_index=True,
                     num_rows="dynamic",
                     width="stretch",
                     key="overview_interviews",
+                    disabled=["Sr No", "Job Link", "Gmail"],
                     column_config={
                         "_id": None,
                         "_source_table": None,
