@@ -54,27 +54,59 @@ def main():
             letter-spacing: -0.02em;
         }
 
-        /* Glassmorphism Container styling */
+        /* Glassmorphism Container styling - scoped without overriding inner input controls */
         .stExpander, [data-testid="stForm"] {
-            background: rgba(30, 41, 59, 0.5) !important;
+            background: rgba(30, 41, 59, 0.55) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
             backdrop-filter: blur(12px) !important;
             border: 1px solid rgba(255, 255, 255, 0.08) !important;
             border-radius: 12px !important;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
+            padding: 1rem !important;
+            margin-bottom: 1rem !important;
         }
 
-        /* Header Accent Badge */
+        /* Header Accent Badge cross-viewport gradient */
         .header-badge {
-            display: inline-block;
-            padding: 4px 12px;
+            display: inline-flex;
+            align-items: center;
+            padding: 5px 14px;
             border-radius: 20px;
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(99, 102, 241, 0.2));
-            border: 1px solid rgba(59, 130, 246, 0.4);
-            color: #60A5FA;
-            font-size: 0.8em;
+            background: -webkit-linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(99, 102, 241, 0.25)) !important;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(99, 102, 241, 0.25)) !important;
+            border: 1px solid rgba(96, 165, 250, 0.4);
+            color: #60A5FA !important;
+            font-size: 0.82em;
             font-weight: 600;
             letter-spacing: 0.5px;
             margin-bottom: 8px;
+            box-shadow: 0 2px 10px rgba(59, 130, 246, 0.15);
+        }
+
+        /* Mobile Viewport Decluttering & Responsive Adjustments */
+        @media (max-width: 768px) {
+            .block-container {
+                padding-top: 1rem !important;
+                padding-bottom: 2rem !important;
+                padding-left: 0.75rem !important;
+                padding-right: 0.75rem !important;
+            }
+            .stExpander, [data-testid="stForm"] {
+                padding: 0.75rem !important;
+                margin-bottom: 0.75rem !important;
+            }
+            h1 {
+                font-size: 1.8rem !important;
+            }
+            h2 {
+                font-size: 1.4rem !important;
+            }
+            h3 {
+                font-size: 1.15rem !important;
+            }
+            [data-testid="stMetricValue"] {
+                font-size: 1.4rem !important;
+            }
         }
 
         /* Smooth scrollbars */
