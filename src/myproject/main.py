@@ -1,3 +1,14 @@
+import sys
+import os
+
+# Add package directories to Python path for Streamlit Cloud deployment
+_curr_dir = os.path.dirname(os.path.abspath(__file__))
+_parent_dir = os.path.dirname(_curr_dir)
+if _curr_dir not in sys.path:
+    sys.path.insert(0, _curr_dir)
+if _parent_dir not in sys.path:
+    sys.path.insert(0, _parent_dir)
+
 import streamlit as st
 from dotenv import load_dotenv
 
