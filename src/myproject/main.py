@@ -45,7 +45,7 @@ def main():
     st.markdown("""<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
 
-html, body, [class*="st-"] {
+html, body {
     font-family: 'Inter', -apple-system, sans-serif;
 }
 
@@ -53,6 +53,17 @@ h1, h2, h3, h4 {
     font-family: 'Inter', sans-serif;
     font-weight: 700;
     letter-spacing: -0.02em;
+}
+
+/* Preserve Streamlit Material Icons font ligatures across all viewports */
+[data-testid="stExpanderToggleIcon"], 
+[data-testid*="icon"], 
+[data-testid*="Icon"], 
+.material-symbols-outlined, 
+.material-icons,
+summary i,
+summary span[aria-hidden="true"] {
+    font-family: 'Material Symbols Rounded', 'Material Symbols Outlined', 'Material Icons', sans-serif !important;
 }
 
 /* Clean Container & Expander Styling */
@@ -64,6 +75,24 @@ h1, h2, h3, h4 {
     border-radius: 12px !important;
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
     margin-bottom: 1rem !important;
+    overflow: hidden !important;
+}
+
+/* Expander Header Summary Flex Alignment */
+.stExpander summary {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 0.75rem 1rem !important;
+    cursor: pointer !important;
+}
+
+.stExpander summary p, details summary p {
+    font-weight: 600 !important;
+    font-size: 1.02rem !important;
+    color: #F8FAFC !important;
+    margin: 0 !important;
+    flex-grow: 1 !important;
 }
 
 [data-testid="stForm"] {
@@ -91,7 +120,28 @@ label[data-testid="stWidgetLabel"], div[data-testid="stMarkdownContainer"] p {
     color: #F1F5F9 !important;
 }
 
-/* Form Buttons & Alignments */
+/* Universal Buttons Layout & Alignment - Prevents icon/text collisions */
+button, [data-testid*="baseButton"] {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    font-weight: 600 !important;
+}
+
+button p, [data-testid*="baseButton"] p {
+    margin: 0 !important;
+    padding: 0 !important;
+    white-space: nowrap !important;
+    font-weight: 600 !important;
+}
+
+button svg, [data-testid*="baseButton"] svg, [data-testid="stExpanderToggleIcon"] svg {
+    flex-shrink: 0 !important;
+    vertical-align: middle !important;
+}
+
+/* Form Submit Buttons */
 button[kind="primaryFormSubmit"], button[data-testid="baseButton-primaryFormSubmit"] {
     margin-top: 0.75rem !important;
     font-weight: 600 !important;
