@@ -55,7 +55,8 @@ h1, h2, h3, h4 {
     letter-spacing: -0.02em;
 }
 
-.stExpander, [data-testid="stForm"] {
+/* Clean Container & Expander Styling */
+.stExpander {
     background: rgba(30, 41, 59, 0.55) !important;
     -webkit-backdrop-filter: blur(12px) !important;
     backdrop-filter: blur(12px) !important;
@@ -63,6 +64,40 @@ h1, h2, h3, h4 {
     border-radius: 12px !important;
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
     margin-bottom: 1rem !important;
+}
+
+[data-testid="stForm"] {
+    background: rgba(30, 41, 59, 0.55) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
+    padding: 1.25rem !important;
+    margin-bottom: 1rem !important;
+}
+
+/* Expander Header Title Text */
+.stExpander summary p, details summary p {
+    font-weight: 600 !important;
+    font-size: 1.05rem !important;
+    color: #F8FAFC !important;
+    margin: 0 !important;
+}
+
+/* Form Widgets & Labels */
+label[data-testid="stWidgetLabel"], div[data-testid="stMarkdownContainer"] p {
+    font-weight: 600 !important;
+    color: #F1F5F9 !important;
+}
+
+/* Form Buttons & Alignments */
+button[kind="primaryFormSubmit"], button[data-testid="baseButton-primaryFormSubmit"] {
+    margin-top: 0.75rem !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3) !important;
+    height: 42px !important;
 }
 
 .header-badge {
@@ -89,13 +124,13 @@ h1, h2, h3, h4 {
         padding-right: 0.75rem !important;
     }
     [data-testid="stForm"] {
-        padding: 0.75rem !important;
+        padding: 0.85rem !important;
         margin-bottom: 0.75rem !important;
     }
-    h1 { font-size: 1.8rem !important; }
-    h2 { font-size: 1.4rem !important; }
-    h3 { font-size: 1.15rem !important; }
-    [data-testid="stMetricValue"] { font-size: 1.4rem !important; }
+    h1 { font-size: 1.75rem !important; }
+    h2 { font-size: 1.35rem !important; }
+    h3 { font-size: 1.1rem !important; }
+    [data-testid="stMetricValue"] { font-size: 1.35rem !important; }
 }
 
 ::-webkit-scrollbar {

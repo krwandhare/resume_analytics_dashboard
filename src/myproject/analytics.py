@@ -66,20 +66,33 @@ def generate_analytics(job_data: pd.DataFrame, events_df: pd.DataFrame = None, a
         if total_apps > 0:
             pipeline_html = f"""
             <style>
-            .chevron-pipeline {{ display: flex; width: 100%; margin: 10px 0; }}
-            .chevron-step {{
+            .chevron-pipeline { display: flex; width: 100%; margin: 10px 0; }
+            .chevron-step {
                 flex-grow: 1; text-align: center; padding: 12px 0; color: white;
                 font-weight: bold; position: relative; margin-right: 4px;
                 clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 50%, calc(100% - 15px) 100%, 0 100%, 15px 50%);
-            }}
-            .chevron-step:first-child {{ clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 50%, calc(100% - 15px) 100%, 0 100%); }}
-            .chevron-step:last-child {{ clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 15px 50%); margin-right: 0; }}
-            .step-applied {{ background-color: #3B82F6; }}
-            .step-interview {{ background-color: #F59E0B; }}
-            .step-offer {{ background-color: #34D399; }}
-            .step-hired {{ background-color: #10B981; }}
-            .chevron-count {{ font-size: 1.4em; display: block; line-height: 1.2; }}
-            .chevron-label {{ font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9; }}
+            }
+            .chevron-step:first-child { clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 50%, calc(100% - 15px) 100%, 0 100%); }
+            .chevron-step:last-child { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 15px 50%); margin-right: 0; }
+            .step-applied { background-color: #3B82F6; }
+            .step-interview { background-color: #F59E0B; }
+            .step-offer { background-color: #34D399; }
+            .step-hired { background-color: #10B981; }
+            .chevron-count { font-size: 1.4em; display: block; line-height: 1.2; }
+            .chevron-label { font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9; }
+
+            @media (max-width: 600px) {
+                .chevron-pipeline { flex-wrap: wrap; gap: 6px; }
+                .chevron-step {
+                    clip-path: none !important;
+                    border-radius: 8px !important;
+                    margin-right: 0 !important;
+                    flex-basis: 48%;
+                    padding: 8px 4px !important;
+                }
+                .chevron-count { font-size: 1.2em !important; }
+                .chevron-label { font-size: 0.7em !important; }
+            }
             </style>
             <div class="chevron-pipeline">
                 <div class="chevron-step step-applied"><span class="chevron-count">{total_apps}</span><span class="chevron-label">Applied</span></div>
