@@ -435,6 +435,8 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 )
                 
                 if st.form_submit_button("💾 Save Interview Changes", type="primary"):
+                    print(f"DEBUG: Save Interview Changes clicked. Active editor_key: {editor_key}")
+                    print(f"DEBUG: All st.session_state keys: {list(st.session_state.keys())}")
                     changes = st.session_state.get(editor_key, {})
                     if not changes or not any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
                         for k in list(st.session_state.keys()):
@@ -442,7 +444,9 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 candidate_changes = st.session_state[k]
                                 if any(len(v) > 0 for v in candidate_changes.values() if isinstance(v, (list, dict))):
                                     changes = candidate_changes
+                                    print(f"DEBUG: Found edited cell changes under key: {k}")
                                     break
+                    print(f"DEBUG: Final extracted changes dict: {changes}")
                     if any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
                         from myproject.data_loader import get_supabase_client, update_job_status_and_notes
                         client = get_supabase_client()
@@ -453,8 +457,10 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 row = display_df.iloc[idx]
                                 if pd.notna(row['_id']):
                                     target_id = int(float(row['_id']))
+                                    print(f"DEBUG: Deleting row ID {target_id} from table {row['_source_table']}")
                                     if client:
-                                        client.table(str(row['_source_table'])).delete().eq('id', target_id).execute()
+                                        res = client.table(str(row['_source_table'])).delete().eq('id', target_id).execute()
+                                        print(f"DEBUG: Delete Supabase response: {res}")
 
                             # Updates
                             for idx_val, edits in changes.get("edited_rows", {}).items():
@@ -486,6 +492,8 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                         col = 'event_date' if source_tbl == 'job_application_events' else ('first_seen_at' if source_tbl == 'jobs' else 'applied_at')
                                         clean_edits[col] = db_val
 
+                                print(f"DEBUG: Target row ID: {target_id} | Table: {source_tbl} | Payload: {clean_edits}")
+
                                 if clean_edits:
                                     # Fallback update to in-memory store for session consistency
                                     update_job_status_and_notes(
@@ -496,12 +504,15 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
 
                                     if client:
                                         try:
-                                            client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
+                                            res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
+                                            print(f"DEBUG: Supabase update API response: {res}")
                                         except Exception as update_err:
+                                            print(f"DEBUG: Supabase update error: {update_err}")
                                             if "PGRST204" in str(update_err) or "rejection_reason" in str(update_err):
                                                 clean_edits.pop("rejection_reason", None)
                                                 if clean_edits:
-                                                    client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
+                                                    res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
+                                                    print(f"DEBUG: Supabase fallback update API response: {res}")
                                             else:
                                                 raise update_err
 
