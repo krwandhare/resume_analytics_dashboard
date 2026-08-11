@@ -408,7 +408,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             if "editor_version" not in st.session_state:
                 st.session_state["editor_version"] = 0
             editor_ver = st.session_state["editor_version"]
-            editor_key = f"overview_interviews_{editor_ver}"
+            editor_key = f"interviews_grid_{editor_ver}"
 
             with st.form("overview_interviews_editor"):
                 st.caption("Double-click any cell to update status, interview date, or notes. Save changes to sync to Supabase.")
@@ -436,6 +436,13 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 
                 if st.form_submit_button("💾 Save Interview Changes", type="primary"):
                     changes = st.session_state.get(editor_key, {})
+                    if not changes or not any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
+                        for k in list(st.session_state.keys()):
+                            if (k.startswith("interviews_grid_") or k.startswith("overview_interviews_")) and isinstance(st.session_state[k], dict):
+                                candidate_changes = st.session_state[k]
+                                if any(len(v) > 0 for v in candidate_changes.values() if isinstance(v, (list, dict))):
+                                    changes = candidate_changes
+                                    break
                     if any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
                         from myproject.data_loader import get_supabase_client, update_job_status_and_notes
                         client = get_supabase_client()
@@ -498,7 +505,9 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                             else:
                                                 raise update_err
 
-                            st.session_state.pop(editor_key, None)
+                            for k in list(st.session_state.keys()):
+                                if k.startswith("interviews_grid_") or k.startswith("overview_interviews_"):
+                                    st.session_state.pop(k, None)
                             st.session_state["editor_version"] = editor_ver + 1
                             st.cache_data.clear()
                             st.success("Successfully updated Supabase!")
