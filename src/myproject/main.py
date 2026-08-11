@@ -15,6 +15,12 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Bootstrap application-wide, BrokenPipe-safe logging BEFORE any module
+# that calls get_logger() is imported.  This ensures all log records from
+# data_loader, components, and views go through SafeStreamHandler.
+from myproject.logger import configure_root_logging
+configure_root_logging()
+
 from myproject.data_loader import load_job_data, load_historical_data, unify_job_statuses
 from myproject.components.sidebar import render_sidebar
 from myproject.views import (

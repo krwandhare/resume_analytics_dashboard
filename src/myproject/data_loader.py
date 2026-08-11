@@ -5,6 +5,9 @@ import urllib.parse
 import pandas as pd
 from typing import Tuple, Dict, Any, Optional
 from supabase import create_client, Client
+from myproject.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 REQUIRED_COLUMNS = ['id', 'company', 'status', 'match_score', 'job_title', 'location', 'posted_at', 'description']
@@ -124,13 +127,13 @@ def update_job_details(job_id: int, match_analysis: str, description: str) -> bo
         res = client.table('jobs').update({
             'match_analysis': match_analysis,
             'description': description
-        }).eq('id', clean_id).execute()
+        }).eq('id', clean_id).select('id').execute()
 
         import streamlit as st
         st.cache_data.clear()
         return True
     except Exception as e:
-        print(f"Error updating job {job_id}: {e}")
+        logger.error("Error updating job %s: %s", job_id, e)
         return False
 
 def update_job_status_and_notes(job_id: int, new_status: str, interview_notes: str) -> bool:
@@ -157,7 +160,7 @@ def update_job_status_and_notes(job_id: int, new_status: str, interview_notes: s
                 'match_analysis': interview_notes,
                 'updated_at': now_str,
                 'is_manually_overridden': True
-            }).eq('id', clean_id).execute()
+            }).eq('id', clean_id).select('id,status').execute()
 
             st.cache_data.clear()
             return True
@@ -167,13 +170,13 @@ def update_job_status_and_notes(job_id: int, new_status: str, interview_notes: s
                     client.table('jobs').update({
                         'status': new_status,
                         'match_analysis': interview_notes
-                    }).eq('id', clean_id).execute()
+                    }).eq('id', clean_id).select('id,status').execute()
                     st.cache_data.clear()
                     return True
                 except Exception as fallback_err:
-                    print(f"Fallback update error for job {clean_id}: {fallback_err}")
+                    logger.error("Fallback update error for job %s: %s", clean_id, fallback_err)
                     return False
-            print(f"Error updating job {clean_id} in Supabase: {e}")
+            logger.error("Error updating job %s in Supabase: %s", clean_id, e)
             return False
 
     st.cache_data.clear()
@@ -341,6 +344,15 @@ def load_job_data() -> Tuple[pd.DataFrame, bool, str]:
         jobs_df = pd.DataFrame(raw_jobs)
         apps_df = pd.DataFrame(raw_apps)
 
+        # Tag origin table BEFORE concatenation. jobs.id and job_applications.id
+        # are independent auto-increment sequences and collide (e.g. both can have
+        # id=3 for unrelated records), so downstream code must never trust 'id'
+        # alone to mean "jobs table" — it must check '_source_table' too.
+        if not jobs_df.empty:
+            jobs_df['_source_table'] = 'jobs'
+        if not apps_df.empty:
+            apps_df['_source_table'] = 'job_applications'
+
         # Standardize job_applications table columns to match jobs schema
         if not apps_df.empty:
             if 'role_title' in apps_df.columns and 'job_title' not in apps_df.columns:
@@ -382,6 +394,17 @@ def fuzzy_match_applications(jobs_df: pd.DataFrame, apps_df: pd.DataFrame) -> pd
     if not company_col or not title_col:
         apps_df['job_id'] = None
         return apps_df
+
+    # jobs_df may actually be the combined jobs+job_applications frame from
+    # load_job_data(). Restrict matching to genuine 'jobs' rows only — otherwise
+    # a job_applications row's id (e.g. 3) can collide with an unrelated jobs.id
+    # (e.g. also 3) and get fuzzy-matched to the wrong company/role entirely.
+    if '_source_table' in jobs_df.columns:
+        jobs_df = jobs_df[jobs_df['_source_table'] == 'jobs']
+        if jobs_df.empty:
+            apps_df = apps_df.copy()
+            apps_df['job_id'] = None
+            return apps_df
 
     jobs_copy = jobs_df.copy()
     apps_copy = apps_df.copy()
@@ -459,8 +482,10 @@ def log_staleness_diagnostics(events_df: pd.DataFrame, company_filter: Optional[
     if target_events.empty:
         return
 
-    import logging
+    import logging as _stdlib_logging  # noqa: F401 — kept for any external callers of logging.root
     date_col = next((c for c in ['created_at', 'event_date', 'date', 'timestamp'] if c in target_events.columns), None)
+    _diag_logger = get_logger(__name__)
+
     
     for idx, row in target_events.iterrows():
         raw_date = row.get(date_col) if date_col else None
@@ -476,10 +501,11 @@ def log_staleness_diagnostics(events_df: pd.DataFrame, company_filter: Optional[
                 staleness_days = None
                 
         days_str = f"{staleness_days:.2f}d" if staleness_days is not None else "N/A"
-        logging.info(
-            f"[DIAGNOSTIC - Event] App ID: {row.get('application_id')}, "
-            f"Company: '{row.get('company')}', Raw Date: '{raw_date}', "
-            f"Staleness Days: {days_str}, Formatted Age: '{formatted_age}'"
+        _diag_logger.info(
+            "[DIAGNOSTIC - Event] App ID: %s, Company: '%s', Raw Date: '%s', "
+            "Staleness Days: %s, Formatted Age: '%s'",
+            row.get('application_id'), row.get('company'), raw_date,
+            days_str, formatted_age
         )
 
 def log_torc_diagnostics(events_df: pd.DataFrame) -> None:

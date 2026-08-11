@@ -2,10 +2,15 @@ import streamlit as st
 import pandas as pd
 import urllib.parse
 from myproject.data_loader import format_staleness
+from myproject.logger import get_logger
+
+logger = get_logger(__name__)
+
 try:
     from myproject.pending_diagnostics import render_pending_diagnostics_component
 except ImportError:
     from ..pending_diagnostics import render_pending_diagnostics_component
+
 
 
 
@@ -166,7 +171,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             
             display_rows.append({
                 '_id': job.get('id'),
-                '_source_table': 'jobs',
+                '_source_table': job.get('_source_table', 'jobs'),
                 'Company': company,
                 'Role': role,
                 'Status': str(job.get('status', 'Unknown')).title(),
@@ -328,7 +333,13 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 for _, app in unique_apps.iterrows():
                     # Check if this app is actively tracked in jobs_df
                     job_id = app.get('job_id')
-                    live_job = df[df['id'] == job_id] if pd.notnull(job_id) and not df.empty else pd.DataFrame()
+                    if pd.notnull(job_id) and not df.empty:
+                        job_id_mask = df['id'] == job_id
+                        if '_source_table' in df.columns:
+                            job_id_mask &= (df['_source_table'] == 'jobs')
+                        live_job = df[job_id_mask]
+                    else:
+                        live_job = pd.DataFrame()
                     
                     if not live_job.empty:
                         job_row = live_job.iloc[0]
@@ -354,12 +365,21 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                     encoded_query = urllib.parse.quote(f"{company} {role}")
                     gmail_link = f"https://mail.google.com/mail/u/0/#search/{encoded_query}"
                     
-                    source_tbl = 'jobs' if not live_job.empty else ('job_application_events' if 'id' in app and pd.notnull(app.get('id')) else 'job_applications')
-                    rec_id = job_row.get('id') if not live_job.empty else app.get('id', app.get('application_id'))
-                    
+                    # IMPORTANT: When live_job is empty, the authoritative record to UPDATE
+                    # is always job_applications (not job_application_events).
+                    # app.get('id') here is the event's ID from job_application_events;
+                    # app.get('application_id') is the job_applications.id we must target.
+                    if not live_job.empty:
+                        source_tbl = 'jobs'
+                        rec_id = job_row.get('id')
+                    else:
+                        source_tbl = 'job_applications'
+                        rec_id = app.get('application_id')  # FK into job_applications.id
+
                     display_rows.append({
                         '_id': rec_id,
                         '_source_table': source_tbl,
+                        '_job_id': app.get('job_id') if not live_job.empty else None,  # jobs.id for cross-sync
                         'Company': str(company),
                         'Role': str(role),
                         'Status': str(status),
@@ -371,7 +391,8 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                     })
         
         # 2. Append any live interviews that might not have historical events (e.g. manually added)
-        live_interviews = df[df['status'].str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]
+        jobs_only_df = df[df['_source_table'] == 'jobs'] if '_source_table' in df.columns else df
+        live_interviews = jobs_only_df[jobs_only_df['status'].str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]
         processed_companies = [r['Company'] for r in display_rows]
         for _, job in live_interviews.iterrows():
             company = job.get('company', 'Unknown')
@@ -384,27 +405,45 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 gmail_link = f"https://mail.google.com/mail/u/0/#search/{encoded_query}"
                 
                 display_rows.append({
-                    '_id': job.get('id'),
-                    '_source_table': 'jobs',
-                    'Company': str(company),
-                    'Role': str(role),
-                    'Status': str(job.get('status', 'Unknown')).title(),
-                    'Round': 'Manual',
-                    'Interview Date': '',
-                    'Rejection Reason': '',
-                    'Job Link': str(job_link),
-                    'Gmail': str(gmail_link)
-                })
+                        '_id': job.get('id'),
+                        '_source_table': 'jobs',
+                        '_job_id': job.get('id'),  # same as _id for live jobs
+                        'Company': str(company),
+                        'Role': str(role),
+                        'Status': str(job.get('status', 'Unknown')).title(),
+                        'Round': 'Manual',
+                        'Interview Date': '',
+                        'Rejection Reason': '',
+                        'Job Link': str(job_link),
+                        'Gmail': str(gmail_link)
+                    })
                 
         if display_rows:
             display_df = pd.DataFrame(display_rows)
-            
-            # Default Sort: Newest interviews first
-            display_df['sort_date'] = pd.to_datetime(display_df['Interview Date'], errors='coerce')
-            display_df = display_df.sort_values('sort_date', ascending=False, na_position='last').drop(columns=['sort_date']).reset_index(drop=True)
-            
+
+            # st.data_editor doesn't support click-to-sort on headers (it would
+            # desync the row-index-based edited_rows/added_rows tracking), so
+            # sorting is exposed as explicit controls instead.
+            sort_col, asc_col = st.columns([3, 1])
+            with sort_col:
+                sort_by = st.selectbox(
+                    "Sort by",
+                    ["Interview Date", "Company", "Role", "Status", "Round"],
+                    key="interviews_sort_by"
+                )
+            with asc_col:
+                sort_ascending = st.checkbox("Ascending", value=False, key="interviews_sort_asc")
+
+            if sort_by == "Interview Date":
+                display_df['_sort_key'] = pd.to_datetime(display_df['Interview Date'], errors='coerce')
+            elif sort_by == "Round":
+                display_df['_sort_key'] = pd.to_numeric(display_df['Round'], errors='coerce')
+            else:
+                display_df['_sort_key'] = display_df[sort_by].astype(str).str.lower()
+            display_df = display_df.sort_values('_sort_key', ascending=sort_ascending, na_position='last').drop(columns=['_sort_key']).reset_index(drop=True)
+
             display_df.insert(0, 'Sr No', range(1, len(display_df) + 1))
-            
+
             if "editor_version" not in st.session_state:
                 st.session_state["editor_version"] = 0
             editor_ver = st.session_state["editor_version"]
@@ -422,10 +461,11 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                     column_config={
                         "_id": None,
                         "_source_table": None,
+                        "_job_id": None,
                         "Sr No": st.column_config.NumberColumn(disabled=True),
                         "Company": st.column_config.TextColumn("Company"),
                         "Role": st.column_config.TextColumn("Role"),
-                        "Status": st.column_config.SelectboxColumn("Status", options=["Interviewing", "Offer Received", "Hired", "Rejected", "Pending", "Applied"]),
+                        "Status": st.column_config.SelectboxColumn("Status", options=["Applied", "Interviewing", "Offer", "Rejected"]),
                         "Round": st.column_config.TextColumn("Round"),
                         "Interview Date": st.column_config.TextColumn("Interview Date"),
                         "Rejection Reason": st.column_config.TextColumn("Rejection Reason / Notes"),
@@ -443,11 +483,11 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                         "update_payload": None,
                         "supabase_response": None
                     }
-                    print("\n=== DEBUG: SAVE BUTTON CLICKED ===", flush=True)
-                    print("SESSION KEYS:", list(st.session_state.keys()), flush=True)
+                    logger.debug("=== DEBUG: SAVE BUTTON CLICKED ===")
+                    logger.debug("SESSION KEYS: %s", list(st.session_state.keys()))
                     for k in list(st.session_state.keys()):
                         if "editor" in k or "grid" in k:
-                            print(f"KEY [{k}]:", st.session_state[k], flush=True)
+                            logger.debug("KEY [%s]: %s", k, st.session_state[k])
 
                     changes = st.session_state.get(editor_key, {})
                     if not changes or not any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
@@ -457,7 +497,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 if any(len(v) > 0 for v in candidate_changes.values() if isinstance(v, (list, dict))):
                                     changes = candidate_changes
                                     break
-                    print("EDITED ROWS DATA:", st.session_state.get("interviews_editor", st.session_state.get("jobs_editor", changes)), flush=True)
+                    logger.debug("EDITED ROWS DATA: %s", st.session_state.get("interviews_editor", st.session_state.get("jobs_editor", changes)))
                     if any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
                         from myproject.data_loader import get_supabase_client, update_job_status_and_notes
                         client = get_supabase_client()
@@ -470,11 +510,11 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                     target_id = int(float(row['_id']))
                                     debug_info["target_record_id"] = target_id
                                     debug_info["source_table"] = str(row['_source_table'])
-                                    print(f"DEBUG: Deleting row ID {target_id} from table {row['_source_table']}", flush=True)
+                                    logger.debug("Deleting row ID %s from table %s", target_id, row['_source_table'])
                                     if client:
                                         res = client.table(str(row['_source_table'])).delete().eq('id', target_id).execute()
                                         debug_info["supabase_response"] = str(res)
-                                        print("SUPABASE PAYLOAD & RES:", res, flush=True)
+                                        logger.debug("SUPABASE DELETE PAYLOAD & RES: %s", res)
 
                             # Updates
                             for idx_val, edits in changes.get("edited_rows", {}).items():
@@ -486,6 +526,9 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 if pd.isna(raw_id) or raw_id is None:
                                     continue
                                 target_id = int(float(raw_id))
+                                # _job_id is jobs.id for cross-table status sync; may differ from target_id
+                                raw_job_id = row.get('_job_id')
+                                linked_job_id = int(float(raw_job_id)) if (raw_job_id is not None and pd.notna(raw_job_id)) else None
 
                                 clean_edits = {}
                                 for k, v in edits.items():
@@ -514,9 +557,15 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 debug_info["target_record_id"] = target_id
                                 debug_info["source_table"] = source_tbl
                                 debug_info["update_payload"] = clean_edits
-                                print(f"DEBUG: Target row ID: {target_id} | Table: {source_tbl} | Payload: {clean_edits}", flush=True)
+                                logger.debug("Target row ID: %s | Table: %s | Payload: %s", target_id, source_tbl, clean_edits)
 
                                 if clean_edits:
+                                    # job_applications has a CHECK constraint requiring lowercase status values.
+                                    # jobs table accepts any case, so we only normalize for job_applications.
+                                    if source_tbl == 'job_applications' and 'status' in clean_edits and clean_edits['status']:
+                                        clean_edits['status'] = clean_edits['status'].lower()
+                                        logger.debug("Normalized status to lowercase for job_applications: %r", clean_edits['status'])
+
                                     # Fallback update to in-memory store for session consistency
                                     update_job_status_and_notes(
                                         target_id,
@@ -526,41 +575,49 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
 
                                     if client:
                                         try:
-                                            res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
+                                            res = client.table(source_tbl).update(clean_edits).eq('id', target_id).select('id,status').execute()
                                             
-                                            # Sync status change to main 'jobs' table if source table was an event sub-table
-                                            if source_tbl != 'jobs' and clean_edits.get('status'):
+                                            # Sync status change to main 'jobs' table when source is job_applications.
+                                            # Use linked_job_id (jobs.id) — NOT target_id (job_applications.id).
+                                            if source_tbl != 'jobs' and clean_edits.get('status') and linked_job_id:
                                                 try:
-                                                    client.table('jobs').update({'status': clean_edits['status']}).eq('id', target_id).execute()
+                                                    client.table('jobs').update({'status': clean_edits['status']}).eq('id', linked_job_id).select('id,status').execute()
                                                 except Exception as parent_sync_err:
-                                                    print(f"DEBUG: Parent jobs table sync notice: {parent_sync_err}", flush=True)
+                                                    logger.debug("Parent jobs table sync notice (jobs.id=%s): %s", linked_job_id, parent_sync_err)
 
                                             if hasattr(res, 'data') and (res.data is None or len(res.data) == 0):
-                                                warn_msg = "⚠️ Warning: Update returned empty data array (data=[]). Record ID not found in table or blocked by RLS policy."
+                                                warn_msg = (
+                                                    f"⚠️ Warning: Update returned empty data array (data=[]).\n"
+                                                    f"Table: {source_tbl} | ID: {target_id} | Payload: {clean_edits}\n"
+                                                    f"Possible causes: RLS policy blocking write, or record ID {target_id} does not exist in '{source_tbl}'."
+                                                )
                                                 debug_info["supabase_response"] = f"Response: {res} | {warn_msg}"
-                                                print(f"DEBUG: {warn_msg}", flush=True)
+                                                logger.warning(warn_msg)
+                                                st.warning(warn_msg)
                                             else:
                                                 debug_info["supabase_response"] = f"✅ Updated row ID {target_id} in {source_tbl}: {res.data}"
-                                            print("SUPABASE PAYLOAD & RES:", res, flush=True)
-                                            print("===================================\n", flush=True)
+                                            logger.debug("SUPABASE UPDATE PAYLOAD & RES: %s", res)
                                         except Exception as update_err:
                                             debug_info["supabase_response"] = f"Error: {update_err}"
-                                            print(f"DEBUG: Supabase update error: {update_err}", flush=True)
+                                            logger.error("Supabase update error (table=%s, id=%s, payload=%s): %s", source_tbl, target_id, clean_edits, update_err)
                                             if "PGRST204" in str(update_err):
                                                 err_msg = str(update_err)
                                                 for bad_col in ['notes', 'interview_date', 'match_analysis', 'rejection_reason', 'is_manually_overridden']:
                                                     if bad_col in err_msg:
                                                         clean_edits.pop(bad_col, None)
                                                 if clean_edits:
-                                                    res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
+                                                    res = client.table(source_tbl).update(clean_edits).eq('id', target_id).select('id,status').execute()
                                                     if hasattr(res, 'data') and (res.data is None or len(res.data) == 0):
-                                                        warn_msg = "⚠️ Warning: Fallback update returned empty data array (data=[]). Record ID not found or blocked by RLS policy."
+                                                        warn_msg = (
+                                                            f"⚠️ Warning: Fallback update returned empty data (data=[]).\n"
+                                                            f"Table: {source_tbl} | ID: {target_id} | Record not found or blocked by RLS."
+                                                        )
                                                         debug_info["supabase_response"] = f"Response: {res} | {warn_msg}"
-                                                        print(f"DEBUG: {warn_msg}", flush=True)
+                                                        logger.warning(warn_msg)
+                                                        st.warning(warn_msg)
                                                     else:
                                                         debug_info["supabase_response"] = f"✅ Updated row ID {target_id}: {res.data}"
-                                                    print("SUPABASE PAYLOAD & RES:", res, flush=True)
-                                                    print("===================================\n", flush=True)
+                                                    logger.debug("SUPABASE FALLBACK PAYLOAD & RES: %s", res)
                                             else:
                                                 raise update_err
 
