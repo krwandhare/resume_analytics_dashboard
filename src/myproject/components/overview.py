@@ -526,8 +526,16 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                     if client:
                                         try:
                                             res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
+                                            
+                                            # Sync status change to main 'jobs' table if source table was an event sub-table
+                                            if source_tbl != 'jobs' and clean_edits.get('status'):
+                                                try:
+                                                    client.table('jobs').update({'status': clean_edits['status']}).eq('id', target_id).execute()
+                                                except Exception as parent_sync_err:
+                                                    print(f"DEBUG: Parent jobs table sync notice: {parent_sync_err}", flush=True)
+
                                             if hasattr(res, 'data') and res.data:
-                                                debug_info["supabase_response"] = f"✅ Updated row ID {target_id}: {res.data}"
+                                                debug_info["supabase_response"] = f"✅ Updated row ID {target_id} in {source_tbl}: {res.data}"
                                             else:
                                                 debug_info["supabase_response"] = f"✅ Update query executed successfully for row ID {target_id} in {source_tbl} ({res})"
                                             print("SUPABASE PAYLOAD & RES:", res, flush=True)
