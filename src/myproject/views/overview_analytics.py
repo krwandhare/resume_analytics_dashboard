@@ -1,8 +1,25 @@
+import sys
+import os
+
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+_myproject_dir = os.path.dirname(_this_dir)
+_src_dir = os.path.dirname(_myproject_dir)
+
+for _p in [_src_dir, _myproject_dir, _this_dir]:
+    if _p and _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import streamlit as st
 import pandas as pd
-from myproject.components.overview import render_overview
-from myproject.analytics import generate_analytics
-from myproject.data_loader import format_staleness
+
+try:
+    from myproject.components.overview import render_overview
+    from myproject.analytics import generate_analytics
+    from myproject.data_loader import format_staleness
+except ImportError:
+    from ..components.overview import render_overview
+    from ..analytics import generate_analytics
+    from ..data_loader import format_staleness
 
 def render_recent_activity_tab(events_df: pd.DataFrame) -> None:
     """Render Recent Activity with an inline search bar and compact scrollable table."""
@@ -143,7 +160,8 @@ def render_overview_analytics_view(filtered_data: pd.DataFrame, events_df: pd.Da
         generate_analytics(filtered_data, events_df, apps_df)
 
     with sub_tab3:
-        from myproject.components.insights import render_insights
+        try:
+            from myproject.components.insights import render_insights
+        except ImportError:
+            from ..components.insights import render_insights
         render_insights(filtered_data, apps_df, key_prefix="overview_insights")
-
-

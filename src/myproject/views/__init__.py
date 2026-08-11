@@ -1,3 +1,14 @@
+import sys
+import os
+
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+_myproject_dir = os.path.dirname(_this_dir)
+_src_dir = os.path.dirname(_myproject_dir)
+
+for _p in [_src_dir, _myproject_dir, _this_dir]:
+    if _p and _p not in sys.path:
+        sys.path.insert(0, _p)
+
 from .overview_analytics import render_overview_analytics_view
 from .job_tracker import render_job_tracker_view
 from .ats_scorer import render_ats_scorer_view

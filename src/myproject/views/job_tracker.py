@@ -1,6 +1,21 @@
+import sys
+import os
+
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+_myproject_dir = os.path.dirname(_this_dir)
+_src_dir = os.path.dirname(_myproject_dir)
+
+for _p in [_src_dir, _myproject_dir, _this_dir]:
+    if _p and _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import streamlit as st
 import pandas as pd
-from myproject.components import render_add_job_form_content, render_insights
+
+try:
+    from myproject.components import render_add_job_form_content, render_insights
+except ImportError:
+    from ..components import render_add_job_form_content, render_insights
 
 @st.dialog("➕ Add New Job Application")
 def show_add_job_dialog():
@@ -23,4 +38,3 @@ def render_job_tracker_view(filtered_data: pd.DataFrame, apps_df: pd.DataFrame =
 
     # Render Table, Search, Gmail Deep Links, and Inspector
     render_insights(filtered_data, apps_df, key_prefix="job_tracker_insights")
-
