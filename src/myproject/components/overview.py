@@ -435,18 +435,16 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 )
                 
                 if st.form_submit_button("💾 Save Interview Changes", type="primary"):
-                    print(f"DEBUG: Save Interview Changes clicked. Active editor_key: {editor_key}")
-                    print(f"DEBUG: All st.session_state keys: {list(st.session_state.keys())}")
+                    print("SESSION KEYS:", list(st.session_state.keys()))
                     changes = st.session_state.get(editor_key, {})
                     if not changes or not any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
                         for k in list(st.session_state.keys()):
-                            if (k.startswith("data_editor_grid_") or k.startswith("interviews_grid_") or k.startswith("overview_interviews_")) and isinstance(st.session_state[k], dict):
+                            if (k.startswith("data_editor_grid_") or k.startswith("interviews_grid_") or k.startswith("overview_interviews_") or k in ["interviews_editor", "jobs_editor"]) and isinstance(st.session_state[k], dict):
                                 candidate_changes = st.session_state[k]
                                 if any(len(v) > 0 for v in candidate_changes.values() if isinstance(v, (list, dict))):
                                     changes = candidate_changes
-                                    print(f"DEBUG: Found edited cell changes under key: {k}")
                                     break
-                    print(f"DEBUG: Final extracted changes dict: {changes}")
+                    print("EDITED ROWS DATA:", st.session_state.get("interviews_editor", st.session_state.get("jobs_editor", changes)))
                     if any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
                         from myproject.data_loader import get_supabase_client, update_job_status_and_notes
                         client = get_supabase_client()
@@ -460,7 +458,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                     print(f"DEBUG: Deleting row ID {target_id} from table {row['_source_table']}")
                                     if client:
                                         res = client.table(str(row['_source_table'])).delete().eq('id', target_id).execute()
-                                        print(f"DEBUG: Delete Supabase response: {res}")
+                                        print("SUPABASE RESPONSE:", res)
 
                             # Updates
                             for idx_val, edits in changes.get("edited_rows", {}).items():
@@ -509,7 +507,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                     if client:
                                         try:
                                             res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
-                                            print(f"DEBUG: Supabase update API response: {res}")
+                                            print("SUPABASE RESPONSE:", res)
                                         except Exception as update_err:
                                             print(f"DEBUG: Supabase update error: {update_err}")
                                             if "PGRST204" in str(update_err):
@@ -519,7 +517,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                                         clean_edits.pop(bad_col, None)
                                                 if clean_edits:
                                                     res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
-                                                    print(f"DEBUG: Supabase fallback update API response: {res}")
+                                                    print("SUPABASE RESPONSE:", res)
                                             else:
                                                 raise update_err
 
