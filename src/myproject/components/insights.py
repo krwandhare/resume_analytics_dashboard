@@ -11,13 +11,18 @@ def render_insights(df: pd.DataFrame, apps_df: pd.DataFrame = None, key_prefix: 
         st.info("No job records available.")
         return
 
-    # Master-Detail Split: Left selection panel (1), Right inspector card (2)
-    left_col, right_col = st.columns([1, 2])
+    # Master-Detail Split: Left selection panel (2), Right inspector card (3)
+    left_col, right_col = st.columns([2, 3])
 
     with left_col:
         st.markdown("### 📋 Select Application")
-        search_q = st.text_input("🔍 Quick Search", "", placeholder="Search company or title...", key=f"{key_prefix}_search")
-        
+        sc1, sc2 = st.columns([1, 1])
+        with sc1:
+            search_q = st.text_input("🔍 Search", "", placeholder="Company or title...", key=f"{key_prefix}_search")
+        with sc2:
+            all_st = ["All Statuses"] + sorted(list(set(df['status'].dropna().astype(str).str.title().tolist())))
+            selected_st = st.selectbox("Status Filter", all_st, key=f"{key_prefix}_st_filter")
+
         filtered_view = df.copy()
         if search_q.strip():
             sq = search_q.strip().lower()
@@ -27,8 +32,11 @@ def render_insights(df: pd.DataFrame, apps_df: pd.DataFrame = None, key_prefix: 
             )
             filtered_view = filtered_view[mask]
 
+        if selected_st != "All Statuses":
+            filtered_view = filtered_view[filtered_view['status'].astype(str).str.title() == selected_st]
+
         if not filtered_view.empty:
-            job_options = {f"{row['company']} - {row['job_title']}": idx for idx, row in filtered_view.iterrows()}
+            job_options = {f"{row['company']} - {row['job_title']} ({row['status']})": idx for idx, row in filtered_view.iterrows()}
             selected_job_label = st.radio(
                 "Select job to inspect:",
                 list(job_options.keys()),
@@ -37,11 +45,10 @@ def render_insights(df: pd.DataFrame, apps_df: pd.DataFrame = None, key_prefix: 
             )
             selected_idx = job_options[selected_job_label]
             selected_job = filtered_view.loc[selected_idx]
-
-
         else:
-            st.warning("No applications match your search.")
+            st.warning("No applications match your search and status filter.")
             selected_job = None
+
 
     with right_col:
         if selected_job is not None:

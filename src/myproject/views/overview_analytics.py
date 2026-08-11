@@ -30,8 +30,16 @@ def render_recent_activity_tab(events_df: pd.DataFrame) -> None:
         st.info("No recent historical events recorded.")
         return
 
-    # Inline Search Bar
-    search_query = st.text_input("🔍 Search Activity", "", placeholder="Filter by company, role, or status...")
+    # 3-Column Inline Filter Bar: Search, Company Filter, Status Filter
+    fc1, fc2, fc3 = st.columns(3)
+    with fc1:
+        search_query = st.text_input("🔍 Search Activity", "", placeholder="Company, role, or status...", key="act_search")
+    with fc2:
+        all_companies = ["All Companies"] + sorted(list(set(events_df['company'].dropna().astype(str).str.title().tolist()))) if 'company' in events_df.columns else ["All Companies"]
+        selected_company = st.selectbox("Filter Company", all_companies, key="act_company_filter")
+    with fc3:
+        all_statuses = ["All Statuses", "🟢 Interviewing", "🔴 Rejected", "🔵 Applied", "🟡 Offer Received"]
+        selected_status = st.selectbox("Filter Status", all_statuses, key="act_status_filter")
 
     date_col = next((c for c in ['created_at', 'event_date', 'date', 'timestamp'] if c in events_df.columns), None)
     desc_col = next((c for c in ['description', 'event_type', 'body', 'message', 'type'] if c in events_df.columns), None)
@@ -75,6 +83,13 @@ def render_recent_activity_tab(events_df: pd.DataFrame) -> None:
 
         act_df = pd.DataFrame(rows)
 
+        # Apply Filters
+        if selected_company != "All Companies":
+            act_df = act_df[act_df['Company'] == selected_company]
+
+        if selected_status != "All Statuses":
+            act_df = act_df[act_df['Status'] == selected_status]
+
         if search_query.strip():
             sq = search_query.strip().lower()
             mask = (
@@ -85,6 +100,8 @@ def render_recent_activity_tab(events_df: pd.DataFrame) -> None:
             act_df = act_df[mask]
 
         if not act_df.empty:
+            act_df['Sr No'] = range(1, len(act_df) + 1)
+
             st.dataframe(
                 act_df,
                 hide_index=True,
