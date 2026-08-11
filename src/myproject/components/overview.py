@@ -205,6 +205,11 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             display_df = pd.DataFrame(display_rows)
             display_df.insert(0, 'Sr No', range(1, len(display_df) + 1))
             
+            if "jobs_editor_version" not in st.session_state:
+                st.session_state["jobs_editor_version"] = 0
+            jobs_ver = st.session_state["jobs_editor_version"]
+            jobs_key = f"overview_jobs_{jobs_ver}"
+
             with st.form("overview_jobs_editor"):
                 st.caption("You can edit and delete jobs directly here. Changes are routed to their original source table.")
                 edited_df = st.data_editor(
@@ -212,7 +217,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                     hide_index=True,
                     num_rows="dynamic",
                     width="stretch",
-                    key="overview_jobs",
+                    key=jobs_key,
                     column_config={
                         "_id": None, 
                         "_source_table": None, 
@@ -225,7 +230,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 )
                 
                 if st.form_submit_button("💾 Save Changes", type="primary"):
-                    changes = st.session_state.get("overview_jobs", {})
+                    changes = st.session_state.get(jobs_key, {})
                     if any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
                         from myproject.data_loader import get_supabase_client
                         client = get_supabase_client()
@@ -237,15 +242,16 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 for idx in changes.get("deleted_rows", []):
                                     row = display_df.iloc[idx]
                                     if pd.notna(row['_id']):
-                                        target_id = int(row['_id'])
+                                        target_id = int(float(row['_id']))
                                         client.table(row['_source_table']).delete().eq('id', target_id).execute()
 
                                 # Updates
-                                for idx, edits in changes.get("edited_rows", {}).items():
+                                for idx_val, edits in changes.get("edited_rows", {}).items():
+                                    idx = int(idx_val)
                                     row = display_df.iloc[idx]
-                                    source_tbl = row['_source_table']
+                                    source_tbl = str(row['_source_table'])
                                     if pd.isna(row['_id']): continue
-                                    target_id = int(row['_id'])
+                                    target_id = int(float(row['_id']))
                                     
                                     clean_edits = {}
                                     for k, v in edits.items():
@@ -266,6 +272,8 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                     if clean_edits:
                                         client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
                                 
+                                st.session_state["jobs_editor_version"] = jobs_ver + 1
+                                st.cache_data.clear()
                                 if changes.get("added_rows"):
                                     st.warning("Adding new jobs from this view is not supported. Use the Database Manager. Edits/Deletes were saved.")
                                 else:
