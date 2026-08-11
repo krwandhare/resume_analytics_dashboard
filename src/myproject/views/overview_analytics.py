@@ -21,25 +21,25 @@ except ImportError:
     from ..analytics import generate_analytics
     from ..data_loader import format_staleness
 
-def render_recent_activity_tab(events_df: pd.DataFrame) -> None:
-    """Render Recent Activity with an inline search bar and compact scrollable table."""
-    st.markdown("### 🏢 Recent Activity Feed")
-    st.caption("Latest application updates, interviews, and status events across your target companies.")
+def render_recent_activity_tab(events_df: pd.DataFrame, key_prefix: str = "activity") -> None:
+    """Render Recent Activity with a consolidated master table and 3-column inline filters."""
+    st.markdown("### 📋 Consolidated Activity Feed & Master Table")
+    st.caption("Inspect and filter all recent application updates, interviews, and status events across your target companies.")
 
     if events_df is None or events_df.empty:
         st.info("No recent historical events recorded.")
         return
 
-    # 3-Column Inline Filter Bar: Search, Company Filter, Status Filter
+    # 3-Column Inline Filter Bar with unique key_prefix scoping
     fc1, fc2, fc3 = st.columns(3)
     with fc1:
-        search_query = st.text_input("🔍 Search Activity", "", placeholder="Company, role, or status...", key="act_search")
+        search_query = st.text_input("🔍 Search Activity", "", placeholder="Company, role, or status...", key=f"{key_prefix}_search")
     with fc2:
         all_companies = ["All Companies"] + sorted(list(set(events_df['company'].dropna().astype(str).str.title().tolist()))) if 'company' in events_df.columns else ["All Companies"]
-        selected_company = st.selectbox("Filter Company", all_companies, key="act_company_filter")
+        selected_company = st.selectbox("Filter Company", all_companies, key=f"{key_prefix}_company_filter")
     with fc3:
         all_statuses = ["All Statuses", "🟢 Interviewing", "🔴 Rejected", "🔵 Applied", "🟡 Offer Received"]
-        selected_status = st.selectbox("Filter Status", all_statuses, key="act_status_filter")
+        selected_status = st.selectbox("Filter Status", all_statuses, key=f"{key_prefix}_status_filter")
 
     date_col = next((c for c in ['created_at', 'event_date', 'date', 'timestamp'] if c in events_df.columns), None)
     desc_col = next((c for c in ['description', 'event_type', 'body', 'message', 'type'] if c in events_df.columns), None)
@@ -116,12 +116,12 @@ def render_recent_activity_tab(events_df: pd.DataFrame) -> None:
                 }
             )
         else:
-            st.info(f"No activity records match '{search_query}'.")
+            st.info("No activity records match your current filters.")
     else:
         st.dataframe(events_df.head(15), width="stretch", hide_index=True)
 
 def render_overview_analytics_view(filtered_data: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: pd.DataFrame = None) -> None:
-    """Render the Overview & Analytics view with Top 4-Column KPI Ribbon and 3 Sub-Tabs."""
+    """Render the Overview & Analytics view with Top 4-Column KPI Ribbon and Sub-Tabs."""
     st.markdown("## 📊 Overview & Pipeline Health")
     st.caption("Track high-level metrics, analyze funnel performance, and review recent activity.")
 
@@ -163,15 +163,19 @@ def render_overview_analytics_view(filtered_data: pd.DataFrame, events_df: pd.Da
     st.write("")
     st.divider()
 
-    # 2. Sub-Tab Architecture (Summary, Analytics, Job Details)
-    sub_tab1, sub_tab2, sub_tab3 = st.tabs([
+    # 2. Sub-Tab Architecture (Summary, Analytics, Job Details, Recent Activity)
+    sub_tab1, sub_tab2, sub_tab3, sub_tab4 = st.tabs([
         "📊 Summary",
         "📈 Analytics",
-        "🏢 Job Details"
+        "🏢 Job Details",
+        "📋 Recent Activity Feed"
     ])
 
     with sub_tab1:
         render_overview(filtered_data, events_df, apps_df)
+        st.write("")
+        st.divider()
+        render_recent_activity_tab(events_df, key_prefix="summary_act")
 
     with sub_tab2:
         generate_analytics(filtered_data, events_df, apps_df)
@@ -182,3 +186,6 @@ def render_overview_analytics_view(filtered_data: pd.DataFrame, events_df: pd.Da
         except ImportError:
             from ..components.insights import render_insights
         render_insights(filtered_data, apps_df, key_prefix="overview_insights")
+
+    with sub_tab4:
+        render_recent_activity_tab(events_df, key_prefix="feed_act")
