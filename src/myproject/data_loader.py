@@ -152,7 +152,7 @@ def update_job_status_and_notes(job_id: int, new_status: str, interview_notes: s
 
     if client:
         try:
-            res = client.table('jobs').update({
+            client.table('jobs').update({
                 'status': new_status,
                 'match_analysis': interview_notes,
                 'updated_at': now_str,
@@ -162,6 +162,17 @@ def update_job_status_and_notes(job_id: int, new_status: str, interview_notes: s
             st.cache_data.clear()
             return True
         except Exception as e:
+            if "PGRST204" in str(e) or "is_manually_overridden" in str(e) or "updated_at" in str(e):
+                try:
+                    client.table('jobs').update({
+                        'status': new_status,
+                        'match_analysis': interview_notes
+                    }).eq('id', clean_id).execute()
+                    st.cache_data.clear()
+                    return True
+                except Exception as fallback_err:
+                    print(f"Fallback update error for job {clean_id}: {fallback_err}")
+                    return False
             print(f"Error updating job {clean_id} in Supabase: {e}")
             return False
 
