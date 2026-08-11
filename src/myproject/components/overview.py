@@ -42,8 +42,29 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
     if events_df is not None and not events_df.empty and 'event_type' in events_df.columns and 'application_id' in events_df.columns:
         interview_events = events_df[events_df['event_type'].astype(str).str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]
         total_interviews = interview_events['application_id'].nunique()
+        offer_events = events_df[events_df['event_type'].astype(str).str.lower().isin(['offer', 'offer received', 'hired'])]
+        total_offers = offer_events['application_id'].nunique()
     else:
         total_interviews = len(df[df['status'].str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]) if 'status' in df.columns else 0
+        total_offers = len(df[df['status'].str.lower().isin(['offer', 'offer received', 'hired'])]) if 'status' in df.columns else 0
+
+    # Calculate conversion metrics
+    app_to_interview_pct = (total_interviews / total_tracked * 100) if total_tracked > 0 else 0.0
+    interview_to_offer_pct = (total_offers / total_interviews * 100) if total_interviews > 0 else 0.0
+
+    if app_to_interview_pct >= 15.0:
+        app_to_int_badge = "🟢 Strong"
+    elif app_to_interview_pct >= 8.0:
+        app_to_int_badge = "🟡 Moderate"
+    else:
+        app_to_int_badge = "🔴 Low Pass"
+
+    if interview_to_offer_pct >= 30.0:
+        int_to_off_badge = "🟢 Strong"
+    elif interview_to_offer_pct >= 15.0:
+        int_to_off_badge = "🟡 Moderate"
+    else:
+        int_to_off_badge = "🔴 Low Pass"
 
     # Custom HTML Flexbox KPI Cards (Glassmorphism Dark Aesthetics)
     kpi_html = f"""
@@ -83,6 +104,8 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
     .kpi-amber::before {{ background: linear-gradient(90deg, #f59e0b, #fbbf24); }}
     .kpi-blue::before {{ background: linear-gradient(90deg, #3b82f6, #60a5fa); }}
     .kpi-emerald::before {{ background: linear-gradient(90deg, #10b981, #34d399); }}
+    .kpi-purple::before {{ background: linear-gradient(90deg, #a855f7, #c084fc); }}
+    .kpi-teal::before {{ background: linear-gradient(90deg, #14b8a6, #2dd4bf); }}
     </style>
     <div class="kpi-container">
         <div class="kpi-card kpi-indigo">
@@ -95,20 +118,25 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             <div class="kpi-value">{avg_match:.1f}%</div>
             <div class="kpi-desc">ATS screen pass rate</div>
         </div>
-        <div class="kpi-card kpi-amber">
-            <div class="kpi-title">🏢 Companies</div>
-            <div class="kpi-value">{total_companies}</div>
-            <div class="kpi-desc">Distinct employers</div>
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-title">🎤 Interviews</div>
+            <div class="kpi-value">{total_interviews}</div>
+            <div class="kpi-desc">Reached interview stage</div>
+        </div>
+        <div class="kpi-card kpi-purple">
+            <div class="kpi-title">📈 App → Interview</div>
+            <div class="kpi-value">{app_to_interview_pct:.1f}%</div>
+            <div class="kpi-desc">{app_to_int_badge} ({total_interviews}/{total_tracked})</div>
+        </div>
+        <div class="kpi-card kpi-teal">
+            <div class="kpi-title">🏆 Interview → Offer</div>
+            <div class="kpi-value">{interview_to_offer_pct:.1f}%</div>
+            <div class="kpi-desc">{int_to_off_badge} ({total_offers}/{total_interviews if total_interviews > 0 else 0})</div>
         </div>
         <div class="kpi-card kpi-blue">
             <div class="kpi-title">⏳ Active/Pending</div>
             <div class="kpi-value">{pending_count}</div>
             <div class="kpi-desc">Awaiting decision</div>
-        </div>
-        <div class="kpi-card kpi-emerald">
-            <div class="kpi-title">🎤 Interviews</div>
-            <div class="kpi-value">{total_interviews}</div>
-            <div class="kpi-desc">Reached interview stage</div>
         </div>
     </div>
     """

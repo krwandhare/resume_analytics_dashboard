@@ -1,0 +1,149 @@
+import streamlit as st
+import pandas as pd
+from myproject.components.overview import render_overview
+from myproject.analytics import generate_analytics
+from myproject.data_loader import format_staleness
+
+def render_recent_activity_tab(events_df: pd.DataFrame) -> None:
+    """Render Recent Activity with an inline search bar and compact scrollable table."""
+    st.markdown("### 🏢 Recent Activity Feed")
+    st.caption("Latest application updates, interviews, and status events across your target companies.")
+
+    if events_df is None or events_df.empty:
+        st.info("No recent historical events recorded.")
+        return
+
+    # Inline Search Bar
+    search_query = st.text_input("🔍 Search Activity", "", placeholder="Filter by company, role, or status...")
+
+    date_col = next((c for c in ['created_at', 'event_date', 'date', 'timestamp'] if c in events_df.columns), None)
+    desc_col = next((c for c in ['description', 'event_type', 'body', 'message', 'type'] if c in events_df.columns), None)
+
+    if date_col and desc_col:
+        events_view = events_df.sort_values(by=date_col, ascending=False).copy()
+        if 'application_id' in events_view.columns:
+            events_view = events_view.drop_duplicates(subset=['application_id'], keep='first')
+
+        rows = []
+        for idx, (_, event) in enumerate(events_view.iterrows(), 1):
+            comp = str(event.get('company', 'Unknown')).strip().title()
+            role = str(event.get('role_title', 'Unknown')).strip().title()
+            raw_status = str(event.get(desc_col, 'Unknown')).lower()
+
+            if raw_status == 'interviewing':
+                badge = "🟢 Interviewing"
+            elif raw_status in ['rejected', 'rejection']:
+                badge = "🔴 Rejected"
+            elif raw_status in ['applied', 'pending']:
+                badge = "🔵 Applied"
+            elif raw_status in ['offer', 'offer received']:
+                badge = "🟡 Offer Received"
+            else:
+                badge = f"⚪ {raw_status.title()}"
+
+            date_val = event.get(date_col)
+            age_badge = format_staleness(date_val)
+            evidence = event.get('evidence_snippet', '')
+            if pd.isna(evidence):
+                evidence = ''
+
+            rows.append({
+                "Sr No": idx,
+                "Company": comp,
+                "Role": role,
+                "Status": badge,
+                "Data Age": age_badge,
+                "Notes / Evidence": evidence
+            })
+
+        act_df = pd.DataFrame(rows)
+
+        if search_query.strip():
+            sq = search_query.strip().lower()
+            mask = (
+                act_df['Company'].astype(str).str.lower().str.contains(sq) |
+                act_df['Role'].astype(str).str.lower().str.contains(sq) |
+                act_df['Status'].astype(str).str.lower().str.contains(sq)
+            )
+            act_df = act_df[mask]
+
+        if not act_df.empty:
+            st.dataframe(
+                act_df,
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "Sr No": st.column_config.NumberColumn("Sr No", width="small"),
+                    "Company": st.column_config.TextColumn("Company"),
+                    "Role": st.column_config.TextColumn("Role"),
+                    "Status": st.column_config.TextColumn("Status"),
+                    "Data Age": st.column_config.TextColumn("Data Age", help="Elapsed time since last update"),
+                    "Notes / Evidence": st.column_config.TextColumn("Notes / Evidence")
+                }
+            )
+        else:
+            st.info(f"No activity records match '{search_query}'.")
+    else:
+        st.dataframe(events_df.head(15), width="stretch", hide_index=True)
+
+def render_overview_analytics_view(filtered_data: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: pd.DataFrame = None) -> None:
+    """Render the Overview & Analytics view with Top 4-Column KPI Ribbon and 3 Sub-Tabs."""
+    st.markdown("## 📊 Overview & Pipeline Health")
+    st.caption("Track high-level metrics, analyze funnel performance, and review recent activity.")
+
+    if filtered_data.empty:
+        st.info("👋 **No matching job records found for the selected filters.** Adjust your sidebar filters or add a new application.")
+        return
+
+    # Calculate Top Metrics
+    total_tracked = len(filtered_data)
+    if apps_df is not None and not apps_df.empty:
+        hist_apps = apps_df[~apps_df['job_id'].isin(filtered_data['id'])] if 'job_id' in apps_df.columns and not filtered_data.empty else apps_df
+        total_tracked += len(hist_apps)
+
+    avg_match = filtered_data['match_score'].mean() if ('match_score' in filtered_data.columns and not filtered_data['match_score'].dropna().empty) else 0.0
+
+    pending_count = len(filtered_data[filtered_data['status'].str.lower().isin(['applied', 'pending', 'reviewing'])]) if 'status' in filtered_data.columns else 0
+
+    if events_df is not None and not events_df.empty and 'event_type' in events_df.columns and 'application_id' in events_df.columns:
+        interview_events = events_df[events_df['event_type'].astype(str).str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]
+        total_interviews = interview_events['application_id'].nunique()
+    else:
+        total_interviews = len(filtered_data[filtered_data['status'].str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]) if 'status' in filtered_data.columns else 0
+
+    # 1. Top 4-Column KPI Ribbon
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+
+    with kpi_col1:
+        st.metric(label="📊 Total Jobs", value=f"{total_tracked}", delta="Tracked in pipeline")
+
+    with kpi_col2:
+        st.metric(label="🎯 Avg Match", value=f"{avg_match:.1f}%", delta="ATS screen rate")
+
+    with kpi_col3:
+        st.metric(label="🎤 Interviews", value=f"{total_interviews}", delta="Reached interview stage")
+
+    with kpi_col4:
+        st.metric(label="⏳ Active/Pending", value=f"{pending_count}", delta="Awaiting decision")
+
+    st.write("")
+    st.divider()
+
+    # 2. Sub-Tab Architecture (Summary, Analytics, Job Details)
+    sub_tab1, sub_tab2, sub_tab3 = st.tabs([
+        "📊 Summary",
+        "📈 Analytics",
+        "🏢 Job Details"
+    ])
+
+    with sub_tab1:
+        render_overview(filtered_data, events_df, apps_df)
+
+    with sub_tab2:
+        generate_analytics(filtered_data, events_df, apps_df)
+
+    with sub_tab3:
+        from myproject.components.insights import render_insights
+        render_insights(filtered_data, apps_df, key_prefix="overview_insights")
+
+

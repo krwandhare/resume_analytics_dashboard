@@ -16,7 +16,7 @@ def render_resume_scorer(job_data: pd.DataFrame) -> None:
     resume_text = ""
     with col1:
         st.markdown("### 1. Upload Resume")
-        input_mode = st.radio("Input Format", ["File Upload (PDF/DOCX)", "Paste Text"], horizontal=True)
+        input_mode = st.segmented_control("Input Format", ["File Upload (PDF/DOCX)", "Paste Text"], default="File Upload (PDF/DOCX)")
 
         if input_mode == "File Upload (PDF/DOCX)":
             uploaded_file = st.file_uploader("Upload Resume File", type=["pdf", "docx"])
@@ -43,7 +43,7 @@ def render_resume_scorer(job_data: pd.DataFrame) -> None:
     
     with col2:
         st.markdown("### 2. Target Job Description")
-        jd_source = st.radio("Job Target Source", ["Select Existing Tracked Job", "Custom Job Description"], horizontal=True)
+        jd_source = st.segmented_control("Job Target Source", ["Select Existing Tracked Job", "Custom Job Description"], default="Select Existing Tracked Job")
 
         if jd_source == "Select Existing Tracked Job" and not job_data.empty:
             job_options = {f"{row['job_title']} @ {row['company']}": idx for idx, row in job_data.iterrows()}
@@ -112,15 +112,15 @@ def render_resume_scorer(job_data: pd.DataFrame) -> None:
         with res_col1:
             st.markdown("#### ✅ Matched Skills & Keywords")
             if result["matched_skills"]:
-                badges = " ".join([f"`{s}`" for s in result["matched_skills"]])
-                st.markdown(badges)
+                matched_html = " ".join([f'<span style="display:inline-block; background:rgba(16, 185, 129, 0.2); color:#34D399; border:1px solid rgba(16, 185, 129, 0.4); padding:4px 10px; border-radius:12px; font-size:0.85em; font-weight:600; margin:3px;">✓ {s}</span>' for s in result["matched_skills"]])
+                st.markdown(matched_html, unsafe_allow_html=True)
             else:
                 st.caption("No matching key technical terms found.")
 
         with res_col2:
             st.markdown("#### ⚠️ Missing Skills to Add")
             if result["missing_skills"]:
-                badges = " ".join([f"`{s}`" for s in result["missing_skills"]])
-                st.markdown(badges)
+                missing_html = " ".join([f'<span style="display:inline-block; background:rgba(239, 68, 68, 0.2); color:#FCA5A5; border:1px solid rgba(239, 68, 68, 0.4); padding:4px 10px; border-radius:12px; font-size:0.85em; font-weight:600; margin:3px;">+ {s}</span>' for s in result["missing_skills"]])
+                st.markdown(missing_html, unsafe_allow_html=True)
             else:
                 st.success("🎉 No key skills missing!")

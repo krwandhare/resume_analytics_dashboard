@@ -108,6 +108,8 @@ def get_supabase_client() -> Optional[Client]:
     key = _get_secret_or_env("SUPABASE_SERVICE_ROLE_KEY") or _get_secret_or_env("SUPABASE_ANON_KEY")
     return create_client(url, key)
 
+MOCK_OVERRIDE_STORE: Dict[int, dict] = {}
+
 def update_job_details(job_id: int, match_analysis: str, description: str) -> bool:
     """Updates the match_analysis and description fields for a specific job."""
     client = get_supabase_client()
@@ -122,6 +124,36 @@ def update_job_details(job_id: int, match_analysis: str, description: str) -> bo
     except Exception as e:
         print(f"Error updating job {job_id}: {e}")
         return False
+
+def update_job_status_and_notes(job_id: int, new_status: str, interview_notes: str) -> bool:
+    """Updates status and interview notes for a job record with last_updated timestamp and is_manually_overridden flag."""
+    from datetime import datetime, timezone
+    now_str = datetime.now(timezone.utc).isoformat()
+    client = get_supabase_client()
+    
+    # Update mock/session state override store
+    MOCK_OVERRIDE_STORE[job_id] = {
+        'status': new_status,
+        'match_analysis': interview_notes,
+        'updated_at': now_str,
+        'is_manually_overridden': True
+    }
+    
+    if client:
+        try:
+            client.table('jobs').update({
+                'status': new_status,
+                'match_analysis': interview_notes,
+                'updated_at': now_str,
+                'is_manually_overridden': True
+            }).eq('id', job_id).execute()
+            return True
+        except Exception as e:
+            print(f"Error updating job {job_id} in Supabase: {e}")
+            return False
+    return True
+
+
 
 def sync_table_changes(table_name: str, original_df: pd.DataFrame, changes_dict: dict) -> Tuple[bool, str]:
     """Applies edited, added, and deleted rows from st.data_editor to Supabase."""
@@ -219,7 +251,16 @@ def sanitize_job_data(df: pd.DataFrame) -> pd.DataFrame:
     df['job_title'] = df['job_title'].fillna('Untitled Job').astype(str)
     df['match_score'] = pd.to_numeric(df['match_score'], errors='coerce').fillna(0.0)
 
+    # Apply in-memory mock overrides if present
+    if MOCK_OVERRIDE_STORE:
+        for j_id, overrides in MOCK_OVERRIDE_STORE.items():
+            mask = df['id'] == j_id
+            if mask.any():
+                for k, v in overrides.items():
+                    df.loc[mask, k] = v
+
     return df
+
 
 def get_mock_job_data() -> pd.DataFrame:
     """Returns fallback sample job data when Supabase is unconfigured or unreachable."""

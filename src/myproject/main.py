@@ -17,13 +17,12 @@ load_dotenv()
 
 from myproject.data_loader import load_job_data, load_historical_data, unify_job_statuses
 from myproject.components.sidebar import render_sidebar
-from myproject.components.overview import render_overview
-from myproject.components.insights import render_insights
-from myproject.components.data_manager import render_data_manager
-from myproject.components.resume_scorer import render_resume_scorer
-from myproject.components.email_webhook_ingestion import render_email_webhook_ingestion
-from myproject.components.add_job_form import render_add_job_form
-from myproject.analytics import generate_analytics
+from myproject.views import (
+    render_overview_analytics_view,
+    render_job_tracker_view,
+    render_ats_scorer_view,
+    render_admin_tools_view
+)
 
 def main():
     st.set_page_config(
@@ -41,12 +40,21 @@ def main():
         <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f4ca.png">
     """, unsafe_allow_html=True)
 
-    # Inject Custom Glassmorphism & Dark Theme CSS
+    # Inject Custom Glassmorphism, Dark Theme & Viewport CSS Overrides
     st.markdown("""<style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
 
 html, body {
     font-family: 'Inter', -apple-system, sans-serif;
+}
+
+.block-container {
+    padding-top: 1.5rem !important;
+    padding-bottom: 1rem !important;
+}
+
+[data-testid="stMetricValue"] {
+    font-size: 1.8rem !important;
 }
 
 h1, h2, h3, h4 {
@@ -99,14 +107,6 @@ summary span[aria-hidden="true"] {
     color: #F8FAFC !important;
     margin: 0 !important;
     flex-grow: 1 !important;
-}
-
-/* Expander Header Title Text */
-.stExpander summary p, details summary p {
-    font-weight: 600 !important;
-    font-size: 1.05rem !important;
-    color: #F8FAFC !important;
-    margin: 0 !important;
 }
 
 /* Form Widgets & Labels */
@@ -218,7 +218,7 @@ button[kind="primaryFormSubmit"], button[data-testid="baseButton-primaryFormSubm
             """)
 
     # Main content header
-    st.markdown('<span class="header-badge">✨ RESUME ANALYTICS v1.1</span>', unsafe_allow_html=True)
+    st.markdown('<span class="header-badge">✨ RESUME ANALYTICS v1.2</span>', unsafe_allow_html=True)
     st.title("Job Intelligence Dashboard")
     st.markdown("Track your job search progress, analyze your ATS match scores, and monitor interview conversions in real-time.")
 
@@ -228,49 +228,31 @@ button[kind="primaryFormSubmit"], button[data-testid="baseButton-primaryFormSubm
     else:
         st.caption(f"🟡 {status_msg}")
 
-    # Render Interactive Add New Job Application Form
-    render_add_job_form()
+    # Tabs navigation setup
+    tab_overview, tab_tracker, tab_ats, tab_admin = st.tabs([
+        "📊 Overview & Analytics",
+        "📝 Job Tracker & Applications",
+        "🎯 ATS Scorer",
+        "⚙️ Admin & Tools"
+    ])
 
-    # Tabs navigation
-    st.write("")
-    st.divider()
-    
-    if len(filtered_data) == 0:
-        with st.container():
-            st.info("👋 **Welcome to Resume Analytics!**")
-            st.markdown("""
-            Here is how this tool helps you land interviews:
-            1. **Track** your applications.
-            2. **Analyze** your AI Match Score for each job.
-            3. **Improve** your resume with coaching tips.
-            """)
-            st.button("➕ Add Your First Job", on_click=lambda: st.success("Feature coming soon!"))
-    else:
-        st.markdown("## 📊 Overview")
-        render_overview(filtered_data, events_df, apps_df)
+    with tab_overview:
+        render_overview_analytics_view(filtered_data, events_df, apps_df)
 
-        st.divider()
-        st.markdown("## 📈 Visual Analytics")
-        generate_analytics(filtered_data, events_df, apps_df)
+    with tab_tracker:
+        render_job_tracker_view(filtered_data, apps_df)
 
-        st.divider()
-        st.markdown("## 📝 Details & Insights")
-        render_insights(filtered_data, apps_df)
-        
-        st.divider()
-        render_resume_scorer(filtered_data)
+    with tab_ats:
+        render_ats_scorer_view(filtered_data)
 
-        st.divider()
-        render_email_webhook_ingestion(filtered_data)
-
-        st.divider()
-        render_data_manager(job_data, apps_df, events_df)
+    with tab_admin:
+        render_admin_tools_view(job_data, apps_df, events_df)
 
     # Footer
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center;">
-        <p>Resume Analytics Dashboard v1.1 • Robust Data Engine</p>
+        <p>Resume Analytics Dashboard v1.2 • Modular Architecture</p>
         <p>© 2026 Resume Analytics Inc. All rights reserved.</p>
     </div>
     """, unsafe_allow_html=True)
