@@ -435,6 +435,14 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 )
                 
                 if st.form_submit_button("💾 Save Interview Changes", type="primary"):
+                    debug_info = {
+                        "active_editor_key": editor_key,
+                        "session_editor_keys": {k: str(st.session_state[k]) for k in st.session_state.keys() if "editor" in k or "grid" in k},
+                        "target_record_id": None,
+                        "source_table": None,
+                        "update_payload": None,
+                        "supabase_response": None
+                    }
                     print("\n=== DEBUG: SAVE BUTTON CLICKED ===", flush=True)
                     print("SESSION KEYS:", list(st.session_state.keys()), flush=True)
                     for k in list(st.session_state.keys()):
@@ -460,9 +468,12 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 row = display_df.iloc[idx]
                                 if pd.notna(row['_id']):
                                     target_id = int(float(row['_id']))
+                                    debug_info["target_record_id"] = target_id
+                                    debug_info["source_table"] = str(row['_source_table'])
                                     print(f"DEBUG: Deleting row ID {target_id} from table {row['_source_table']}", flush=True)
                                     if client:
                                         res = client.table(str(row['_source_table'])).delete().eq('id', target_id).execute()
+                                        debug_info["supabase_response"] = str(res)
                                         print("SUPABASE PAYLOAD & RES:", res, flush=True)
 
                             # Updates
@@ -499,6 +510,9 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                         else:
                                             clean_edits['applied_at'] = db_val
 
+                                debug_info["target_record_id"] = target_id
+                                debug_info["source_table"] = source_tbl
+                                debug_info["update_payload"] = clean_edits
                                 print(f"DEBUG: Target row ID: {target_id} | Table: {source_tbl} | Payload: {clean_edits}", flush=True)
 
                                 if clean_edits:
@@ -512,9 +526,11 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                     if client:
                                         try:
                                             res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
+                                            debug_info["supabase_response"] = str(res)
                                             print("SUPABASE PAYLOAD & RES:", res, flush=True)
                                             print("===================================\n", flush=True)
                                         except Exception as update_err:
+                                            debug_info["supabase_response"] = f"Error: {update_err}"
                                             print(f"DEBUG: Supabase update error: {update_err}", flush=True)
                                             if "PGRST204" in str(update_err):
                                                 err_msg = str(update_err)
@@ -523,11 +539,13 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                                         clean_edits.pop(bad_col, None)
                                                 if clean_edits:
                                                     res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
+                                                    debug_info["supabase_response"] = str(res)
                                                     print("SUPABASE PAYLOAD & RES:", res, flush=True)
                                                     print("===================================\n", flush=True)
                                             else:
                                                 raise update_err
 
+                            st.session_state["save_debug_info"] = debug_info
                             for k in list(st.session_state.keys()):
                                 if k.startswith("data_editor_grid_") or k.startswith("interviews_grid_") or k.startswith("overview_interviews_"):
                                     st.session_state.pop(k, None)
@@ -537,9 +555,14 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                             st.toast("✅ Saved interview changes!")
                             st.rerun()
                         except Exception as e:
+                            st.session_state["save_debug_info"] = debug_info
                             st.error(f"Error saving changes: {e}")
                     else:
                         st.info("No changes to save.")
+
+            if "save_debug_info" in st.session_state:
+                with st.expander("🔍 Mobile Diagnostic Logs (Save Response & Payload)", expanded=True):
+                    st.json(st.session_state["save_debug_info"])
         else:
             st.info("No Interviewing applications found.")
 
