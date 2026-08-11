@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
+import urllib.parse
 from myproject.data_loader import format_staleness
+
 
 
 def get_match_label(score):
@@ -146,8 +148,8 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
     selected_drilldown = st.pills("Drill down into KPIs:", drilldown_options, default="Hide Table")
     
     if selected_drilldown == "💼 View All Jobs":
-        import urllib.parse
         display_rows = []
+
         for _, job in df.iterrows():
             raw_date = job.get('first_seen_at')
             fmt_date = pd.to_datetime(raw_date).strftime('%Y-%m-%d') if pd.notnull(raw_date) else ''

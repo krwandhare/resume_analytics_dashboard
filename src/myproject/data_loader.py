@@ -1,7 +1,11 @@
 import os
+import time
+import urllib.request
+import urllib.parse
 import pandas as pd
 from typing import Tuple, Dict, Any, Optional
 from supabase import create_client, Client
+
 
 REQUIRED_COLUMNS = ['id', 'company', 'status', 'match_score', 'job_title', 'location', 'posted_at', 'description']
 
