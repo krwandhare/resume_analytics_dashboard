@@ -526,7 +526,10 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                     if client:
                                         try:
                                             res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
-                                            debug_info["supabase_response"] = str(res)
+                                            if hasattr(res, 'data') and res.data:
+                                                debug_info["supabase_response"] = f"✅ Updated row ID {target_id}: {res.data}"
+                                            else:
+                                                debug_info["supabase_response"] = f"✅ Update query executed successfully for row ID {target_id} in {source_tbl} ({res})"
                                             print("SUPABASE PAYLOAD & RES:", res, flush=True)
                                             print("===================================\n", flush=True)
                                         except Exception as update_err:
@@ -539,7 +542,10 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                                         clean_edits.pop(bad_col, None)
                                                 if clean_edits:
                                                     res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
-                                                    debug_info["supabase_response"] = str(res)
+                                                    if hasattr(res, 'data') and res.data:
+                                                        debug_info["supabase_response"] = f"✅ Updated row ID {target_id}: {res.data}"
+                                                    else:
+                                                        debug_info["supabase_response"] = f"✅ Fallback update query executed for row ID {target_id} in {source_tbl} ({res})"
                                                     print("SUPABASE PAYLOAD & RES:", res, flush=True)
                                                     print("===================================\n", flush=True)
                                             else:
