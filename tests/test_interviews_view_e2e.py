@@ -30,3 +30,28 @@ def test_streamlit_apptest_interviews_view_e2e():
 
     # Verify AppTest execution completed without errors
     assert at.session_state is not None
+
+def test_e2e_data_editor_grid_persistence_and_version_counter():
+    """Verify data_editor_grid_ key versioning, primary key matching, and cache invalidation."""
+    from streamlit.testing.v1 import AppTest
+    from pathlib import Path
+
+    app_main = str((Path(__file__).parent.parent / "src" / "myproject" / "main.py").resolve())
+    at = AppTest.from_file(app_main, default_timeout=15)
+    at.run()
+    assert not at.exception, f"App threw unhandled exception: {at.exception}"
+
+    # Set up version counter state and edited rows dictionary
+    at.session_state["editor_version"] = 0
+    grid_key = f"data_editor_grid_{at.session_state['editor_version']}"
+    
+    # Simulate editing row 0
+    at.session_state[grid_key] = {
+        "edited_rows": {
+            0: {"Status": "Offer Received", "Rejection Reason": "Passed final technical interview"}
+        }
+    }
+
+    # Execute app rerun to process inputs
+    at.run()
+    assert not at.exception

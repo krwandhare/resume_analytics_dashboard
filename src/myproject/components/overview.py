@@ -408,7 +408,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             if "editor_version" not in st.session_state:
                 st.session_state["editor_version"] = 0
             editor_ver = st.session_state["editor_version"]
-            editor_key = f"interviews_grid_{editor_ver}"
+            editor_key = f"data_editor_grid_{editor_ver}"
 
             with st.form("overview_interviews_editor"):
                 st.caption("Double-click any cell to update status, interview date, or notes. Save changes to sync to Supabase.")
@@ -438,7 +438,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                     changes = st.session_state.get(editor_key, {})
                     if not changes or not any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
                         for k in list(st.session_state.keys()):
-                            if (k.startswith("interviews_grid_") or k.startswith("overview_interviews_")) and isinstance(st.session_state[k], dict):
+                            if (k.startswith("data_editor_grid_") or k.startswith("interviews_grid_") or k.startswith("overview_interviews_")) and isinstance(st.session_state[k], dict):
                                 candidate_changes = st.session_state[k]
                                 if any(len(v) > 0 for v in candidate_changes.values() if isinstance(v, (list, dict))):
                                     changes = candidate_changes
@@ -506,7 +506,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                                 raise update_err
 
                             for k in list(st.session_state.keys()):
-                                if k.startswith("interviews_grid_") or k.startswith("overview_interviews_"):
+                                if k.startswith("data_editor_grid_") or k.startswith("interviews_grid_") or k.startswith("overview_interviews_"):
                                     st.session_state.pop(k, None)
                             st.session_state["editor_version"] = editor_ver + 1
                             st.cache_data.clear()
