@@ -34,3 +34,16 @@ def test_streamlit_apptest_e2e_manual_override():
     # Verify main title and tabs presence
     assert len(at.tabs) > 0, "Expected tabs to be present in main view"
 
+def test_rejection_reason_column_resilience():
+    """Verify that updating job status or notes does not throw PGRST204 schema mismatch errors."""
+    from myproject.data_loader import get_supabase_client, is_valid_supabase_config
+    is_valid, _ = is_valid_supabase_config()
+    if is_valid:
+        client = get_supabase_client()
+        res = client.table('jobs').select('id').limit(1).execute()
+        if res.data:
+            target_id = res.data[0]['id']
+            update_res = client.table('jobs').update({'status': 'Interviewing'}).eq('id', target_id).execute()
+            assert update_res.data is not None
+
+

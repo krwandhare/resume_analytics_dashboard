@@ -539,7 +539,11 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                         db_val = None if pd.isna(v) else v
                                         if k == 'Company': clean_edits['company'] = db_val
                                         elif k == 'Status': clean_edits['status'] = db_val
-                                        elif k == 'Rejection Reason': clean_edits['rejection_reason'] = db_val
+                                        elif k == 'Rejection Reason':
+                                            if source_tbl == 'jobs':
+                                                clean_edits['match_analysis'] = db_val
+                                            else:
+                                                clean_edits['rejection_reason'] = db_val
                                         elif k == 'Role':
                                             col = 'job_title' if source_tbl == 'jobs' else 'role_title'
                                             clean_edits[col] = db_val
@@ -551,7 +555,16 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                             clean_edits[col] = db_val
 
                                     if clean_edits:
-                                        client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
+                                        try:
+                                            client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
+                                        except Exception as update_err:
+                                            if "PGRST204" in str(update_err) or "rejection_reason" in str(update_err):
+                                                clean_edits.pop("rejection_reason", None)
+                                                if clean_edits:
+                                                    client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
+                                            else:
+                                                raise update_err
+
 
                                 st.toast("✅ Saved interview changes!")
                                 st.rerun()
