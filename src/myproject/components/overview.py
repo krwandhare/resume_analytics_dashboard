@@ -482,9 +482,10 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 row = display_df.iloc[idx]
                                 source_tbl = str(row['_source_table'])
 
-                                if pd.isna(row['_id']) or row['_id'] is None:
+                                raw_id = row.get('_id') if pd.notna(row.get('_id')) else (row.get('id') if pd.notna(row.get('id')) else row.get('job_id'))
+                                if pd.isna(raw_id) or raw_id is None:
                                     continue
-                                target_id = int(float(row['_id']))
+                                target_id = int(float(raw_id))
 
                                 clean_edits = {}
                                 for k, v in edits.items():
