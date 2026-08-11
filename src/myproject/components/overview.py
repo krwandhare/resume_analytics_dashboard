@@ -477,7 +477,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                     db_val = None if pd.isna(v) else v
                                     if k == 'Company': clean_edits['company'] = db_val
                                     elif k == 'Status': clean_edits['status'] = db_val
-                                    elif k == 'Rejection Reason':
+                                    elif k in ['Rejection Reason', 'Notes', 'Notes / Evidence']:
                                         if source_tbl == 'jobs':
                                             clean_edits['match_analysis'] = db_val
                                         else:
@@ -489,8 +489,12 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                         col = 'job_url' if source_tbl == 'jobs' else 'job_posting_url'
                                         clean_edits[col] = db_val
                                     elif k == 'Interview Date':
-                                        col = 'event_date' if source_tbl == 'job_application_events' else ('first_seen_at' if source_tbl == 'jobs' else 'applied_at')
-                                        clean_edits[col] = db_val
+                                        if source_tbl == 'job_application_events':
+                                            clean_edits['event_date'] = db_val
+                                        elif source_tbl == 'jobs':
+                                            clean_edits['first_seen_at'] = db_val
+                                        else:
+                                            clean_edits['applied_at'] = db_val
 
                                 print(f"DEBUG: Target row ID: {target_id} | Table: {source_tbl} | Payload: {clean_edits}")
 
@@ -508,8 +512,11 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                             print(f"DEBUG: Supabase update API response: {res}")
                                         except Exception as update_err:
                                             print(f"DEBUG: Supabase update error: {update_err}")
-                                            if "PGRST204" in str(update_err) or "rejection_reason" in str(update_err):
-                                                clean_edits.pop("rejection_reason", None)
+                                            if "PGRST204" in str(update_err):
+                                                err_msg = str(update_err)
+                                                for bad_col in ['notes', 'interview_date', 'match_analysis', 'rejection_reason', 'is_manually_overridden']:
+                                                    if bad_col in err_msg:
+                                                        clean_edits.pop(bad_col, None)
                                                 if clean_edits:
                                                     res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
                                                     print(f"DEBUG: Supabase fallback update API response: {res}")
