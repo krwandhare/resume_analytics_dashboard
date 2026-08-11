@@ -272,6 +272,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                     if clean_edits:
                                         client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
                                 
+                                st.session_state.pop(jobs_key, None)
                                 st.session_state["jobs_editor_version"] = jobs_ver + 1
                                 st.cache_data.clear()
                                 if changes.get("added_rows"):
@@ -497,6 +498,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                             else:
                                                 raise update_err
 
+                            st.session_state.pop(editor_key, None)
                             st.session_state["editor_version"] = editor_ver + 1
                             st.cache_data.clear()
                             st.success("Successfully updated Supabase!")
