@@ -120,10 +120,14 @@ def update_job_details(job_id: int, match_analysis: str, description: str) -> bo
     if not client:
         return False
     try:
-        client.table('jobs').update({
+        clean_id = int(float(job_id))
+        res = client.table('jobs').update({
             'match_analysis': match_analysis,
             'description': description
-        }).eq('id', job_id).execute()
+        }).eq('id', clean_id).execute()
+
+        import streamlit as st
+        st.cache_data.clear()
         return True
     except Exception as e:
         print(f"Error updating job {job_id}: {e}")
@@ -132,58 +136,64 @@ def update_job_details(job_id: int, match_analysis: str, description: str) -> bo
 def update_job_status_and_notes(job_id: int, new_status: str, interview_notes: str) -> bool:
     """Updates status and interview notes for a job record with last_updated timestamp and is_manually_overridden flag."""
     from datetime import datetime, timezone
+    import streamlit as st
+
+    clean_id = int(float(job_id))
     now_str = datetime.now(timezone.utc).isoformat()
     client = get_supabase_client()
-    
+
     # Update mock/session state override store
-    MOCK_OVERRIDE_STORE[job_id] = {
+    MOCK_OVERRIDE_STORE[clean_id] = {
         'status': new_status,
         'match_analysis': interview_notes,
         'updated_at': now_str,
         'is_manually_overridden': True
     }
-    
+
     if client:
         try:
-            client.table('jobs').update({
+            res = client.table('jobs').update({
                 'status': new_status,
                 'match_analysis': interview_notes,
                 'updated_at': now_str,
                 'is_manually_overridden': True
-            }).eq('id', job_id).execute()
+            }).eq('id', clean_id).execute()
+
+            st.cache_data.clear()
             return True
         except Exception as e:
-            print(f"Error updating job {job_id} in Supabase: {e}")
+            print(f"Error updating job {clean_id} in Supabase: {e}")
             return False
+
+    st.cache_data.clear()
     return True
-
-
 
 def sync_table_changes(table_name: str, original_df: pd.DataFrame, changes_dict: dict) -> Tuple[bool, str]:
     """Applies edited, added, and deleted rows from st.data_editor to Supabase."""
+    import streamlit as st
     client = get_supabase_client()
     if not client:
         return False, "Not connected to Supabase."
     try:
         # Deletes
         for idx in changes_dict.get("deleted_rows", []):
-            row_id = original_df.iloc[idx]['id']
+            row_id = int(float(original_df.iloc[idx]['id']))
             client.table(table_name).delete().eq('id', row_id).execute()
 
         # Updates
-        for idx, edits in changes_dict.get("edited_rows", {}).items():
-            row_id = original_df.iloc[idx]['id']
-            # Convert any potential numpy/pandas types to standard Python types before sending to Supabase
+        for idx_val, edits in changes_dict.get("edited_rows", {}).items():
+            idx = int(idx_val)
+            row_id = int(float(original_df.iloc[idx]['id']))
             clean_edits = {k: (None if pd.isna(v) else v) for k, v in edits.items()}
             client.table(table_name).update(clean_edits).eq('id', row_id).execute()
 
         # Inserts
-        for row in changes_dict.get("added_rows", []):
-            clean_row = {k: (None if pd.isna(v) else v) for k, v in row.items()}
-            # Remove 'id' if it's there as it's auto-generated
+        for new_row in changes_dict.get("added_rows", []):
+            clean_row = {k: (None if pd.isna(v) else v) for k, v in new_row.items()}
             clean_row.pop('id', None)
             client.table(table_name).insert(clean_row).execute()
 
+        st.cache_data.clear()
         return True, "Synced successfully!"
     except Exception as e:
         return False, f"Sync error: {str(e)}"

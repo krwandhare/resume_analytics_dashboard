@@ -484,6 +484,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                             else:
                                                 raise update_err
 
+                            st.cache_data.clear()
                             st.success("Successfully updated Supabase!")
                             st.toast("✅ Saved interview changes!")
                             st.rerun()

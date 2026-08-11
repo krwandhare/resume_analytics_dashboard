@@ -139,6 +139,7 @@ def render_insights(df: pd.DataFrame, apps_df: pd.DataFrame = None, key_prefix: 
                             from myproject.data_loader import update_job_status_and_notes
                             success = update_job_status_and_notes(selected_job['id'], new_status, new_notes)
                             if success:
+                                st.cache_data.clear()
                                 st.toast(f"✅ Status updated to '{new_status}'!")
                                 st.rerun()
                             else:
