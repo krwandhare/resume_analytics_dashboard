@@ -178,18 +178,48 @@ button[kind="primaryFormSubmit"], button[data-testid="baseButton-primaryFormSubm
     [data-testid="stMetricValue"] { font-size: 1.35rem !important; }
 }
 
+/* Universal Interactive Element Pointer & Smooth Transitions */
+button, [data-testid*="baseButton"], [data-testid="stPill"], [data-testid="stSegmentedControl"], summary, div[role="button"], [data-baseweb="tab"] {
+    cursor: pointer !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+button:hover, [data-testid*="baseButton"]:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.35) !important;
+}
+
+/* Metric Cards UI/UX Pro Max Styling */
+[data-testid="stMetric"] {
+    background: rgba(15, 23, 42, 0.5) !important;
+    border: 1px solid rgba(59, 130, 246, 0.2) !important;
+    border-radius: 10px !important;
+    padding: 0.85rem 1.1rem !important;
+    transition: border-color 0.2s ease, transform 0.2s ease !important;
+}
+
+[data-testid="stMetric"]:hover {
+    border-color: rgba(59, 130, 246, 0.4) !important;
+    transform: translateY(-1px) !important;
+}
+
+[data-testid="stMetricValue"] {
+    font-family: 'Fira Code', monospace !important;
+    font-weight: 600 !important;
+}
+
+/* Custom Scrollbars */
 ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
 }
 ::-webkit-scrollbar-track {
-    background: #0F172A;
+    background: #0f172a;
 }
 ::-webkit-scrollbar-thumb {
     background: #334155;
     border-radius: 4px;
 }
-::-webkit-scrollbar-thumb:hover {
     background: #475569;
 }
 </style>""", unsafe_allow_html=True)
