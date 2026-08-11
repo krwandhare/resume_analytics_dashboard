@@ -2,6 +2,11 @@ import streamlit as st
 import pandas as pd
 import urllib.parse
 from myproject.data_loader import format_staleness
+try:
+    from myproject.pending_diagnostics import render_pending_diagnostics_component
+except ImportError:
+    from ..pending_diagnostics import render_pending_diagnostics_component
+
 
 
 
@@ -291,102 +296,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             st.info("No companies found.")
             
     elif selected_drilldown == "👀 View Active / Pending":
-        display_rows = []
-        
-        # 1. Live tracker Active/Pending jobs
-        active_jobs = df[df['status'].str.lower().isin(['applied', 'pending', 'reviewing'])]
-        for _, job in active_jobs.iterrows():
-            job_link = job.get('job_url', '')
-            if pd.isna(job_link): job_link = ''
-            
-            raw_date = job.get('first_seen_at')
-            fmt_date = pd.to_datetime(raw_date).strftime('%Y-%m-%d') if pd.notnull(raw_date) else ''
-            
-            days_since = ''
-            if pd.notnull(raw_date):
-                days_since = (pd.Timestamp.now(tz=pd.to_datetime(raw_date).tz) - pd.to_datetime(raw_date)).days
-            
-            display_rows.append({
-                'Company': job.get('company', 'Unknown'),
-                'Role': job.get('job_title', 'Unknown'),
-                'Status': str(job.get('status', 'Unknown')).title(),
-                'Applied Date': fmt_date,
-                'Data Age': format_staleness(raw_date),
-                'Days Since Applied': days_since,
-                'Job Link': job_link
-            })
-            
-        # 2. Historical Active/Pending apps
-        if apps_df is not None and not apps_df.empty:
-            hist_active = apps_df[apps_df['status'].str.lower().isin(['applied', 'pending', 'reviewing'])]
-            
-            if 'job_id' in hist_active.columns and not active_jobs.empty:
-                hist_active = hist_active[~hist_active['job_id'].isin(active_jobs['id'])]
-                
-            for _, app in hist_active.iterrows():
-                job_link = app.get('job_posting_url', '')
-                if pd.isna(job_link): job_link = ''
-                
-                raw_date = app.get('applied_at')
-                fmt_date = pd.to_datetime(raw_date).strftime('%Y-%m-%d') if pd.notnull(raw_date) else ''
-                
-                days_since = ''
-                if pd.notnull(raw_date):
-                    days_since = (pd.Timestamp.now(tz=pd.to_datetime(raw_date).tz) - pd.to_datetime(raw_date)).days
-                
-                company = app.get('company', 'Unknown')
-                role = app.get('role_title', 'Unknown')
-                encoded_query = urllib.parse.quote(f"{company} {role}")
-                gmail_link = f"https://mail.google.com/mail/u/0/#search/{encoded_query}"
-
-                display_rows.append({
-                    'Company': company,
-                    'Role': role,
-                    'Status': str(app.get('status', 'Unknown')).title(),
-                    'Applied Date': fmt_date,
-                    'Data Age': format_staleness(raw_date),
-                    'Days Since Applied': days_since,
-                    'Job Link': job_link,
-                    'Gmail': gmail_link
-                })
-                
-        if display_rows:
-            display_df = pd.DataFrame(display_rows)
-            
-            # Overwrite Status for ghosted applications
-            display_df['numeric_days'] = pd.to_numeric(display_df['Days Since Applied'], errors='coerce')
-            display_df.loc[display_df['numeric_days'] > 20, 'Status'] = 'Ghosted'
-            
-            # Default Sort: Oldest applications first (most days since applied)
-            display_df = display_df.sort_values('numeric_days', ascending=False, na_position='last').drop(columns=['numeric_days'])
-            
-            display_df.insert(0, 'Sr No', range(1, len(display_df) + 1))
-            cols = ['Sr No', 'Company', 'Role', 'Status', 'Applied Date', 'Data Age', 'Job Link', 'Gmail']
-            display_cols = [c for c in cols if c in display_df.columns]
-            
-            # Apply color coding for ghosted rows
-            def highlight_ghosted(row):
-                if row['Status'] == 'Ghosted':
-                    return ['background-color: rgba(255, 99, 71, 0.15)'] * len(row)
-                return [''] * len(row)
-                
-            styled_df = display_df[display_cols].style.apply(highlight_ghosted, axis=1)
-            
-            st.dataframe(
-                styled_df,
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "Data Age": st.column_config.TextColumn(
-                        "Data Age",
-                        help="Elapsed time since this record was created or last updated (🟢 Fresh < 24h, 🟡 Moderate 1-2d, 🔴 Stale > 2d)"
-                    ),
-                    "Job Link": st.column_config.LinkColumn("Job Posting", display_text="🔗 View Posting"),
-                    "Gmail": st.column_config.LinkColumn("Gmail Search", display_text="📧 Search Gmail")
-                }
-            )
-        else:
-            st.info("No Active/Pending applications found.")
+        render_pending_diagnostics_component(df, apps_df)
             
     elif selected_drilldown == "🎤 View Interviews":
         display_rows = []
