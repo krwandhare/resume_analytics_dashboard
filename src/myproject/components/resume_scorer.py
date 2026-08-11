@@ -8,7 +8,7 @@ from myproject.resume_scorer import (
 
 def render_resume_scorer(job_data: pd.DataFrame) -> None:
     """Render the PDF resume upload & ATS Skill Match Scorer component."""
-    st.subheader("📄 Resume Match Scorer & ATS Keyword Analyzer")
+    st.subheader(":material/description: Resume Match Scorer & ATS Keyword Analyzer")
     st.caption("Upload your resume (PDF/DOCX) or paste resume text, and calculate your ATS match score against target job descriptions.")
 
     col1, col2 = st.columns([1, 1])

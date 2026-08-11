@@ -4,7 +4,7 @@ import urllib.parse
 
 def render_insights(df: pd.DataFrame, apps_df: pd.DataFrame = None) -> None:
     """Render details table and job insights."""
-    st.subheader("Match Analysis & Job Details")
+    st.subheader(":material/insights: Match Analysis & Job Details")
     st.caption("💡 **Data Source:** A raw, filterable view into the `jobs` table.")
 
     if df.empty:

@@ -19,7 +19,7 @@ def get_match_label(score):
 
 def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: pd.DataFrame = None) -> None:
     """Render high-level overview metrics."""
-    st.subheader("Job Pipeline Overview")
+    st.subheader(":material/dashboard: Job Pipeline Overview")
 
     if df.empty:
         st.info("No matching records found for the selected filters.")

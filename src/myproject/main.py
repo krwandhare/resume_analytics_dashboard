@@ -66,16 +66,22 @@ summary span[aria-hidden="true"] {
     font-family: 'Material Symbols Rounded', 'Material Symbols Outlined', 'Material Icons', sans-serif !important;
 }
 
-/* Clean Container & Expander Styling */
-.stExpander {
-    background: rgba(30, 41, 59, 0.55) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    backdrop-filter: blur(12px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+/* Obsidian Glassmorphism Container & Expander Styling */
+.stExpander, [data-testid="stForm"], div[data-testid="stContainer"][border="true"] {
+    background: rgba(15, 23, 42, 0.65) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(59, 130, 246, 0.25) !important;
     border-radius: 12px !important;
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35), 0 0 15px rgba(59, 130, 246, 0.08) !important;
     margin-bottom: 1rem !important;
     overflow: hidden !important;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.stExpander:hover, [data-testid="stForm"]:hover {
+    border-color: rgba(59, 130, 246, 0.45) !important;
+    box-shadow: 0 10px 36px 0 rgba(0, 0, 0, 0.45), 0 0 20px rgba(59, 130, 246, 0.15) !important;
 }
 
 /* Expander Header Summary Flex Alignment */
@@ -83,27 +89,16 @@ summary span[aria-hidden="true"] {
     display: flex !important;
     align-items: center !important;
     gap: 8px !important;
-    padding: 0.75rem 1rem !important;
+    padding: 0.85rem 1.1rem !important;
     cursor: pointer !important;
 }
 
 .stExpander summary p, details summary p {
     font-weight: 600 !important;
-    font-size: 1.02rem !important;
+    font-size: 1.05rem !important;
     color: #F8FAFC !important;
     margin: 0 !important;
     flex-grow: 1 !important;
-}
-
-[data-testid="stForm"] {
-    background: rgba(30, 41, 59, 0.55) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    backdrop-filter: blur(12px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    border-radius: 12px !important;
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.25) !important;
-    padding: 1.25rem !important;
-    margin-bottom: 1rem !important;
 }
 
 /* Expander Header Title Text */
