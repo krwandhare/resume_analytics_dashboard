@@ -534,10 +534,12 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                                 except Exception as parent_sync_err:
                                                     print(f"DEBUG: Parent jobs table sync notice: {parent_sync_err}", flush=True)
 
-                                            if hasattr(res, 'data') and res.data:
-                                                debug_info["supabase_response"] = f"✅ Updated row ID {target_id} in {source_tbl}: {res.data}"
+                                            if hasattr(res, 'data') and (res.data is None or len(res.data) == 0):
+                                                warn_msg = "⚠️ Warning: Update returned empty data array (data=[]). Record ID not found in table or blocked by RLS policy."
+                                                debug_info["supabase_response"] = f"Response: {res} | {warn_msg}"
+                                                print(f"DEBUG: {warn_msg}", flush=True)
                                             else:
-                                                debug_info["supabase_response"] = f"✅ Update query executed successfully for row ID {target_id} in {source_tbl} ({res})"
+                                                debug_info["supabase_response"] = f"✅ Updated row ID {target_id} in {source_tbl}: {res.data}"
                                             print("SUPABASE PAYLOAD & RES:", res, flush=True)
                                             print("===================================\n", flush=True)
                                         except Exception as update_err:
@@ -550,10 +552,12 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                                         clean_edits.pop(bad_col, None)
                                                 if clean_edits:
                                                     res = client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
-                                                    if hasattr(res, 'data') and res.data:
-                                                        debug_info["supabase_response"] = f"✅ Updated row ID {target_id}: {res.data}"
+                                                    if hasattr(res, 'data') and (res.data is None or len(res.data) == 0):
+                                                        warn_msg = "⚠️ Warning: Fallback update returned empty data array (data=[]). Record ID not found or blocked by RLS policy."
+                                                        debug_info["supabase_response"] = f"Response: {res} | {warn_msg}"
+                                                        print(f"DEBUG: {warn_msg}", flush=True)
                                                     else:
-                                                        debug_info["supabase_response"] = f"✅ Fallback update query executed for row ID {target_id} in {source_tbl} ({res})"
+                                                        debug_info["supabase_response"] = f"✅ Updated row ID {target_id}: {res.data}"
                                                     print("SUPABASE PAYLOAD & RES:", res, flush=True)
                                                     print("===================================\n", flush=True)
                                             else:
