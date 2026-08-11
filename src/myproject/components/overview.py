@@ -423,48 +423,57 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 if st.form_submit_button("💾 Save Interview Changes", type="primary"):
                     changes = st.session_state.get("overview_interviews", {})
                     if any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
-                        from myproject.data_loader import get_supabase_client
+                        from myproject.data_loader import get_supabase_client, update_job_status_and_notes
                         client = get_supabase_client()
-                        if not client:
-                            st.error("Not connected to Supabase.")
-                        else:
-                            try:
-                                # Deletes
-                                for idx in changes.get("deleted_rows", []):
-                                    row = display_df.iloc[idx]
-                                    if pd.notna(row['_id']):
-                                        target_id = int(row['_id'])
-                                        client.table(row['_source_table']).delete().eq('id', target_id).execute()
+                        try:
+                            # Deletes
+                            for idx_val in changes.get("deleted_rows", []):
+                                idx = int(idx_val)
+                                row = display_df.iloc[idx]
+                                if pd.notna(row['_id']):
+                                    target_id = int(float(row['_id']))
+                                    if client:
+                                        client.table(str(row['_source_table'])).delete().eq('id', target_id).execute()
 
-                                # Updates
-                                for idx, edits in changes.get("edited_rows", {}).items():
-                                    row = display_df.iloc[idx]
-                                    source_tbl = row['_source_table']
+                            # Updates
+                            for idx_val, edits in changes.get("edited_rows", {}).items():
+                                idx = int(idx_val)
+                                row = display_df.iloc[idx]
+                                source_tbl = str(row['_source_table'])
 
-                                    if pd.isna(row['_id']): continue
-                                    target_id = int(row['_id'])
+                                if pd.isna(row['_id']) or row['_id'] is None:
+                                    continue
+                                target_id = int(float(row['_id']))
 
-                                    clean_edits = {}
-                                    for k, v in edits.items():
-                                        db_val = None if pd.isna(v) else v
-                                        if k == 'Company': clean_edits['company'] = db_val
-                                        elif k == 'Status': clean_edits['status'] = db_val
-                                        elif k == 'Rejection Reason':
-                                            if source_tbl == 'jobs':
-                                                clean_edits['match_analysis'] = db_val
-                                            else:
-                                                clean_edits['rejection_reason'] = db_val
-                                        elif k == 'Role':
-                                            col = 'job_title' if source_tbl == 'jobs' else 'role_title'
-                                            clean_edits[col] = db_val
-                                        elif k == 'Job Link':
-                                            col = 'job_url' if source_tbl == 'jobs' else 'job_posting_url'
-                                            clean_edits[col] = db_val
-                                        elif k == 'Interview Date':
-                                            col = 'event_date' if source_tbl == 'job_application_events' else ('first_seen_at' if source_tbl == 'jobs' else 'applied_at')
-                                            clean_edits[col] = db_val
+                                clean_edits = {}
+                                for k, v in edits.items():
+                                    db_val = None if pd.isna(v) else v
+                                    if k == 'Company': clean_edits['company'] = db_val
+                                    elif k == 'Status': clean_edits['status'] = db_val
+                                    elif k == 'Rejection Reason':
+                                        if source_tbl == 'jobs':
+                                            clean_edits['match_analysis'] = db_val
+                                        else:
+                                            clean_edits['rejection_reason'] = db_val
+                                    elif k == 'Role':
+                                        col = 'job_title' if source_tbl == 'jobs' else 'role_title'
+                                        clean_edits[col] = db_val
+                                    elif k == 'Job Link':
+                                        col = 'job_url' if source_tbl == 'jobs' else 'job_posting_url'
+                                        clean_edits[col] = db_val
+                                    elif k == 'Interview Date':
+                                        col = 'event_date' if source_tbl == 'job_application_events' else ('first_seen_at' if source_tbl == 'jobs' else 'applied_at')
+                                        clean_edits[col] = db_val
 
-                                    if clean_edits:
+                                if clean_edits:
+                                    # Fallback update to in-memory store for session consistency
+                                    update_job_status_and_notes(
+                                        target_id,
+                                        clean_edits.get('status'),
+                                        clean_edits.get('match_analysis') or clean_edits.get('rejection_reason')
+                                    )
+
+                                    if client:
                                         try:
                                             client.table(source_tbl).update(clean_edits).eq('id', target_id).execute()
                                         except Exception as update_err:
@@ -475,13 +484,14 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                             else:
                                                 raise update_err
 
-
-                                st.toast("✅ Saved interview changes!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error saving: {e}")
+                            st.success("Successfully updated Supabase!")
+                            st.toast("✅ Saved interview changes!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error saving changes: {e}")
                     else:
                         st.info("No changes to save.")
         else:
             st.info("No Interviewing applications found.")
+
 
