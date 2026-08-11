@@ -396,6 +396,11 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
             
             display_df.insert(0, 'Sr No', range(1, len(display_df) + 1))
             
+            if "editor_version" not in st.session_state:
+                st.session_state["editor_version"] = 0
+            editor_ver = st.session_state["editor_version"]
+            editor_key = f"overview_interviews_{editor_ver}"
+
             with st.form("overview_interviews_editor"):
                 st.caption("Double-click any cell to update status, interview date, or notes. Save changes to sync to Supabase.")
                 edited_df = st.data_editor(
@@ -403,7 +408,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                     hide_index=True,
                     num_rows="dynamic",
                     width="stretch",
-                    key="overview_interviews",
+                    key=editor_key,
                     disabled=["Sr No", "Job Link", "Gmail"],
                     column_config={
                         "_id": None,
@@ -421,7 +426,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 )
                 
                 if st.form_submit_button("💾 Save Interview Changes", type="primary"):
-                    changes = st.session_state.get("overview_interviews", {})
+                    changes = st.session_state.get(editor_key, {})
                     if any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
                         from myproject.data_loader import get_supabase_client, update_job_status_and_notes
                         client = get_supabase_client()
@@ -484,6 +489,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                             else:
                                                 raise update_err
 
+                            st.session_state["editor_version"] = editor_ver + 1
                             st.cache_data.clear()
                             st.success("Successfully updated Supabase!")
                             st.toast("✅ Saved interview changes!")
