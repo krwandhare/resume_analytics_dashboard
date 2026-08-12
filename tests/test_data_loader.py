@@ -1,16 +1,40 @@
-import pytest
+import logging
+
 import pandas as pd
-import os
+import pytest
+
 from myproject.data_loader import (
-    is_valid_supabase_config,
-    sanitize_job_data,
-    get_mock_job_data,
-    load_job_data,
+    REQUIRED_COLUMNS,
+    add_discovered_to_tracker,
+    dismiss_discovered_jobs,
     format_staleness,
-    log_torc_diagnostics,
+    get_mock_job_data,
+    is_valid_supabase_config,
+    load_job_data,
     log_staleness_diagnostics,
-    REQUIRED_COLUMNS
+    log_torc_diagnostics,
+    sanitize_job_data,
+    sync_table_changes,
 )
+
+
+SYNTHETIC_SECRET = "synthetic-service-role-secret-123456"
+PRIVATE_COMPANY = "Private Payload Company"
+
+
+class FailingQuery:
+    def __getattr__(self, _name):
+        return lambda *args, **kwargs: self
+
+    def execute(self):
+        raise RuntimeError(
+            f"Authorization: Bearer {SYNTHETIC_SECRET}; company={PRIVATE_COMPANY}"
+        )
+
+
+class FailingClient:
+    def table(self, _table_name):
+        return FailingQuery()
 
 def test_is_valid_supabase_config_default_placeholder(monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", "https://your-project.supabase.co")
@@ -100,9 +124,79 @@ def test_staleness_diagnostics(caplog, company, event_date):
     ])
     with caplog.at_level(logging.INFO):
         log_staleness_diagnostics(events_data)
-        
+
     assert "DIAGNOSTIC - Event" in caplog.text
-    assert company in caplog.text
-    assert "Staleness Days" in caplog.text
+    assert company not in caplog.text
+    assert event_date not in caplog.text if event_date else True
+    assert "event_count=1" in caplog.text
+    assert "company_filter_applied=False" in caplog.text
+
+
+def test_sync_table_changes_returns_safe_error(monkeypatch, caplog):
+    monkeypatch.setattr(
+        "myproject.data_loader.get_supabase_client",
+        lambda: FailingClient(),
+    )
+    original_df = pd.DataFrame([{"id": 17, "company": PRIVATE_COMPANY}])
+    changes = {
+        "edited_rows": {0: {"company": PRIVATE_COMPANY}},
+        "deleted_rows": [],
+        "added_rows": [],
+    }
+
+    with caplog.at_level(logging.ERROR):
+        success, message = sync_table_changes("jobs", original_df, changes)
+
+    assert success is False
+    assert message == "Unable to synchronize these changes right now."
+    assert SYNTHETIC_SECRET not in message
+    assert PRIVATE_COMPANY not in message
+    assert SYNTHETIC_SECRET not in caplog.text
+    assert PRIVATE_COMPANY not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("function_name", "args", "expected_message"),
+    [
+        (
+            "add",
+            (29, "Private Role", PRIVATE_COMPANY, 84.0, "private notes", "https://private.invalid"),
+            "Unable to add the discovered job to the tracker right now.",
+        ),
+        (
+            "dismiss",
+            ([29, 30],),
+            "Unable to dismiss the selected jobs right now.",
+        ),
+    ],
+)
+def test_discovered_job_failures_do_not_expose_payloads(
+    monkeypatch,
+    caplog,
+    function_name,
+    args,
+    expected_message,
+):
+    monkeypatch.setattr(
+        "myproject.data_loader.get_supabase_client",
+        lambda: FailingClient(),
+    )
+    function = (
+        add_discovered_to_tracker
+        if function_name == "add"
+        else dismiss_discovered_jobs
+    )
+
+    with caplog.at_level(logging.ERROR):
+        success, message = function(*args)
+
+    assert success is False
+    assert message == expected_message
+    assert SYNTHETIC_SECRET not in message
+    assert PRIVATE_COMPANY not in message
+    assert SYNTHETIC_SECRET not in caplog.text
+    assert PRIVATE_COMPANY not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text
 
 

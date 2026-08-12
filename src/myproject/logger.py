@@ -1,81 +1,191 @@
 """
-myproject/logger.py
--------------------
-Centralised logging configuration for the Streamlit dashboard.
+Centralised, credential-safe logging for the Streamlit dashboard.
 
-Why this module exists
-~~~~~~~~~~~~~~~~~~~~~~
-Streamlit runs inside a subprocess whose stdout/stderr can close while the
-Python process is still running (e.g. during a page rerun or when the
-browser disconnects).  A plain ``print(..., flush=True)`` call on a closed
-pipe raises ``BrokenPipeError: [Errno 32] Broken pipe`` and, if not caught,
-crashes the Streamlit rerun loop.
-
-This module provides:
-  • ``get_logger(name)``  — returns a named Logger that is safe to use in
-    any Streamlit component or data-loading module.
-  • ``SafeStreamHandler`` — a custom StreamHandler that swallows
-    ``BrokenPipeError`` / ``OSError(32)`` without crashing.
-  • ``configure_root_logging()`` — call once from ``main.py`` at startup to
-    bootstrap the root logger with the correct level, format, and handler.
-
-Usage
-~~~~~
-    from myproject.logger import get_logger
-
-    logger = get_logger(__name__)
-
-    logger.debug("=== SAVE BUTTON CLICKED ===")
-    logger.warning("No changes detected.")
-    logger.error("Supabase update error: %s", exc)
+Streamlit can close stdout/stderr during a page rerun or browser disconnect.
+``SafeStreamHandler`` drops those broken-pipe writes instead of crashing the
+rerun loop. The logging bootstrap also redacts credentials before records
+reach handlers and limits verbose third-party transport logging.
 """
 
+from collections.abc import Mapping
+from functools import lru_cache
 import logging
+import os
+import re
 import sys
+import traceback
 from typing import Optional
 
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 _LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 _DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
-_DEFAULT_LEVEL = logging.DEBUG
+_DEFAULT_LEVEL = logging.INFO
+_REDACTED = "[REDACTED]"
+
+_SENSITIVE_KEY_NAMES = {
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_OAUTH_CLIENT_SECRET",
+    "GMAIL_OAUTH_TOKEN",
+    "ACCESS_TOKEN",
+    "REFRESH_TOKEN",
+    "CLIENT_SECRET",
+}
+_DEPENDENCY_LOG_LEVELS = {
+    "httpx": logging.WARNING,
+    "httpcore": logging.WARNING,
+    "postgrest": logging.WARNING,
+    "supabase": logging.WARNING,
+    "gotrue": logging.WARNING,
+    "storage3": logging.WARNING,
+    "realtime": logging.WARNING,
+    "google": logging.WARNING,
+    "google.auth": logging.WARNING,
+    "googleapiclient": logging.WARNING,
+    "urllib3": logging.WARNING,
+}
+
+_FIELD_VALUE = r"(\[REDACTED\]|[^\s,;\"'{}\[\]]+)"
+_AUTH_FIELD_PATTERN = re.compile(
+    rf"(?i)\b(authorization|proxy-authorization)\b"
+    rf"([\"']?\s*[:=]\s*[\"']?)(?:bearer\s+)?{_FIELD_VALUE}([\"']?)"
+)
+_SECRET_FIELD_PATTERN = re.compile(
+    rf"(?i)\b(apikey|api[_-]?key|access[_-]?token|refresh[_-]?token|"
+    rf"client[_-]?secret|service[_-]?role[_-]?key)\b"
+    rf"([\"']?\s*[:=]\s*[\"']?){_FIELD_VALUE}([\"']?)"
+)
+_BEARER_PATTERN = re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]+")
+_JWT_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\."
+    r"[A-Za-z0-9_-]{6,}(?![A-Za-z0-9_-])"
+)
+_SUPABASE_KEY_PATTERN = re.compile(r"\bsb_(?:secret|publishable)_[A-Za-z0-9_-]{12,}\b")
 
 
-# ---------------------------------------------------------------------------
-# BrokenPipe-safe stream handler
-# ---------------------------------------------------------------------------
+def _replace_named_field(match: re.Match[str]) -> str:
+    """Preserve a credential field name and delimiter while redacting its value."""
+    return f"{match.group(1)}{match.group(2)}{_REDACTED}{match.group(4)}"
+
+
+def _collect_nested_secret_values(value, parent_key: str = "") -> set[str]:
+    """Collect recognized secret values from a nested Streamlit secrets map."""
+    values: set[str] = set()
+    if isinstance(value, Mapping):
+        for key, nested_value in value.items():
+            normalized_key = str(key).upper()
+            values.update(_collect_nested_secret_values(nested_value, normalized_key))
+        return values
+
+    if parent_key in _SENSITIVE_KEY_NAMES or any(
+        marker in parent_key
+        for marker in ("TOKEN", "SECRET", "API_KEY", "APIKEY", "SERVICE_ROLE_KEY")
+    ):
+        secret = str(value).strip()
+        if len(secret) >= 8:
+            values.add(secret)
+    return values
+
+
+@lru_cache(maxsize=1)
+def _streamlit_secret_values() -> tuple[str, ...]:
+    """Read recognized Streamlit secret values once without surfacing errors."""
+    try:
+        import streamlit as st
+
+        return tuple(_collect_nested_secret_values(st.secrets.to_dict()))
+    except Exception:
+        return ()
+
+
+def _known_secret_values() -> set[str]:
+    """Return current recognized environment and Streamlit credential values."""
+    values = set(_streamlit_secret_values())
+    for key, value in os.environ.items():
+        normalized_key = key.upper()
+        if normalized_key in _SENSITIVE_KEY_NAMES or any(
+            marker in normalized_key
+            for marker in ("TOKEN", "SECRET", "API_KEY", "APIKEY", "SERVICE_ROLE_KEY")
+        ):
+            clean_value = value.strip()
+            if len(clean_value) >= 8:
+                values.add(clean_value)
+    return values
+
+
+def sanitize_log_text(value) -> str:
+    """Redact credentials and credential-bearing fields from arbitrary text."""
+    text = str(value)
+    for secret in sorted(_known_secret_values(), key=len, reverse=True):
+        text = text.replace(secret, _REDACTED)
+
+    text = _AUTH_FIELD_PATTERN.sub(_replace_named_field, text)
+    text = _SECRET_FIELD_PATTERN.sub(_replace_named_field, text)
+    text = _BEARER_PATTERN.sub(f"Bearer {_REDACTED}", text)
+    text = _JWT_PATTERN.sub(_REDACTED, text)
+    return _SUPABASE_KEY_PATTERN.sub(_REDACTED, text)
+
+
+def _sanitize_record(record: logging.LogRecord) -> None:
+    """Mutate a record so every downstream handler receives safe text."""
+    try:
+        message = record.getMessage()
+    except Exception:
+        message = str(record.msg)
+    record.msg = sanitize_log_text(message)
+    record.args = ()
+
+    if record.exc_info:
+        exception_text = "".join(traceback.format_exception(*record.exc_info))
+        record.exc_text = sanitize_log_text(exception_text)
+        record.exc_info = None
+    elif record.exc_text:
+        record.exc_text = sanitize_log_text(record.exc_text)
+
+    if record.stack_info:
+        record.stack_info = sanitize_log_text(record.stack_info)
+
+
+def _install_safe_record_factory() -> None:
+    """Install one process-wide record factory that sanitizes before handlers."""
+    current_factory = logging.getLogRecordFactory()
+    if getattr(current_factory, "_myproject_credential_safe", False):
+        return
+
+    def credential_safe_factory(*args, **kwargs):
+        record = current_factory(*args, **kwargs)
+        _sanitize_record(record)
+        return record
+
+    credential_safe_factory._myproject_credential_safe = True  # type: ignore[attr-defined]
+    logging.setLogRecordFactory(credential_safe_factory)
+
+
+class CredentialSafeFormatter(logging.Formatter):
+    """Apply final-output redaction, including custom fields and tracebacks."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        _sanitize_record(record)
+        return sanitize_log_text(super().format(record))
+
+
 class SafeStreamHandler(logging.StreamHandler):
-    """A StreamHandler that silently drops records when the stream is broken.
-
-    On macOS/Linux, writing to a closed stdout/stderr raises::
-
-        BrokenPipeError: [Errno 32] Broken pipe
-
-    The built-in ``StreamHandler.emit()`` calls ``self.handleError(record)``
-    which *also* tries to write to stderr, potentially looping or crashing.
-
-    On Python 3.14+, ``logging.Handler.handle()`` propagates exceptions raised
-    inside ``emit()`` without catching them (CPython gh-107603).  This subclass
-    therefore reimplements ``handle()`` from scratch — directly managing the
-    handler lock and calling our safe ``emit()`` — so BrokenPipeError can
-    never reach the Streamlit run loop regardless of Python version.
-    """
+    """A StreamHandler that silently drops records when the stream is broken."""
 
     def emit(self, record: logging.LogRecord) -> None:
         """Emit a record, swallowing broken-pipe errors silently."""
         try:
             msg = self.format(record)
             stream = self.stream
-            # Use terminator from StreamHandler; fallback to newline.
             terminator = getattr(self, "terminator", "\n")
             try:
                 stream.write(msg + terminator)
                 self.flush()
             except (BrokenPipeError, OSError) as exc:
                 if isinstance(exc, BrokenPipeError) or getattr(exc, "errno", None) == 32:
-                    return  # Silently discard — stream is gone.
+                    return
                 raise
         except RecursionError:
             raise
@@ -83,32 +193,23 @@ class SafeStreamHandler(logging.StreamHandler):
             self.handleError(record)
 
     def handle(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
-        """Dispatch a record, holding the handler lock and swallowing pipe errors.
-
-        Re-implements ``logging.Handler.handle()`` from scratch so that we own
-        the full try/except around ``emit()``.  This is necessary on Python
-        3.14+ where ``Handler.handle()`` no longer wraps ``emit()`` in a
-        try/except (CPython gh-107603).
-        """
+        """Dispatch a record while ensuring pipe errors cannot escape."""
         rv = self.filter(record)
         if rv:
             self.acquire()
             try:
                 self.emit(record)
             except (BrokenPipeError, OSError) as exc:
-                # Belt-and-suspenders: if emit() somehow re-raises after our
-                # internal guard (e.g. during format()), catch it here too.
-                if not (isinstance(exc, BrokenPipeError) or getattr(exc, "errno", None) == 32):
+                if not (
+                    isinstance(exc, BrokenPipeError)
+                    or getattr(exc, "errno", None) == 32
+                ):
                     raise
             finally:
                 self.release()
         return rv  # type: ignore[return-value]
 
 
-
-# ---------------------------------------------------------------------------
-# Module-level bootstrap state
-# ---------------------------------------------------------------------------
 _logging_configured: bool = False
 
 
@@ -118,63 +219,35 @@ def configure_root_logging(
     fmt: Optional[str] = None,
     datefmt: Optional[str] = None,
 ) -> None:
-    """Configure the root logger with a ``SafeStreamHandler``.
-
-    Call this **once** from ``main.py`` before the first ``get_logger()``
-    call.  Subsequent calls are no-ops (idempotent).
-
-    Parameters
-    ----------
-    level:
-        Logging level for the root logger (default ``DEBUG``).
-    stream:
-        Output stream (default ``sys.stderr``).  stderr is preferred over
-        stdout for logging so that Streamlit's own stdout pipeline is not
-        polluted.
-    fmt:
-        Log record format string (default: ``_LOG_FORMAT``).
-    datefmt:
-        Date/time format string (default: ``_DATE_FORMAT``).
-    """
+    """Configure credential-safe root logging once for the current process."""
     global _logging_configured
     if _logging_configured:
         return
 
+    _install_safe_record_factory()
+
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
 
-    # Avoid adding duplicate handlers when Streamlit hot-reloads the module.
-    if not any(isinstance(h, SafeStreamHandler) for h in root_logger.handlers):
+    if not any(isinstance(handler, SafeStreamHandler) for handler in root_logger.handlers):
         handler = SafeStreamHandler(stream or sys.stderr)
         handler.setLevel(level)
-        formatter = logging.Formatter(
-            fmt=fmt or _LOG_FORMAT,
-            datefmt=datefmt or _DATE_FORMAT,
+        handler.setFormatter(
+            CredentialSafeFormatter(
+                fmt=fmt or _LOG_FORMAT,
+                datefmt=datefmt or _DATE_FORMAT,
+            )
         )
-        handler.setFormatter(formatter)
         root_logger.addHandler(handler)
+
+    for logger_name, dependency_level in _DEPENDENCY_LOG_LEVELS.items():
+        logging.getLogger(logger_name).setLevel(dependency_level)
 
     _logging_configured = True
 
 
 def get_logger(name: str = "myproject") -> logging.Logger:
-    """Return a named logger, ensuring root logging is bootstrapped.
-
-    If ``configure_root_logging()`` has not been called yet (e.g. in a
-    test or when a component is imported directly), this function performs
-    a lazy bootstrap with default settings so that log messages are never
-    silently discarded.
-
-    Parameters
-    ----------
-    name:
-        Logger name.  Pass ``__name__`` from the calling module so log
-        records include the originating module path.
-
-    Returns
-    -------
-    logging.Logger
-    """
+    """Return a named logger, lazily bootstrapping safe root logging."""
     if not _logging_configured:
         configure_root_logging()
     return logging.getLogger(name)

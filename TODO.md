@@ -9,12 +9,12 @@
 - Robust data engine and component architecture implemented.
 - Automatic fallback demo dataset active when Supabase environment variables are missing or unconfigured.
 - Weekly digest generation, dashboard preview/download, and Gmail API OAuth delivery are implemented and locally validated.
-- Validation baseline: 62 tests passed; Python compilation, diff checks, and the no-email Streamlit smoke test passed.
+- Validation baseline: 80 tests passed; Python compilation, diff checks, credential-diagnostic audit, and the no-email Streamlit smoke test passed.
 - Feature commit `12199b8` is on `feature/claude-private-gmail-digest`; it has not been pushed and no pull request exists yet.
 
 ## Next Tasks
 - [ ] Rotate the Supabase service-role credential exposed in earlier verbose test output; update the ignored local `.env` and revoke the old credential.
-- [ ] Review HTTP/client logging so Supabase credentials and authorization headers cannot appear in test or runtime output.
+- [x] Harden HTTP/client and application logging with credential redaction, safe dependency log levels, metadata-only diagnostics, stable UI errors, and security regression tests.
 - [ ] Push `feature/claude-private-gmail-digest` and open a pull request after confirming the remote target.
 - [ ] Configure the ignored local Gmail sender/recipient values and authorize the send-only desktop OAuth client.
 - [ ] Review the generated digest and perform one explicitly authorized live email delivery test.

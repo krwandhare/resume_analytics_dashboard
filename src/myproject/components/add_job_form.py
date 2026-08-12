@@ -4,6 +4,10 @@ from myproject.statuses import STATUS_OPTIONS
 import pandas as pd
 from typing import Tuple
 from myproject.data_loader import get_supabase_client, is_valid_supabase_config, DEFAULT_MOCK_DATA
+from myproject.logger import get_logger
+
+
+logger = get_logger(__name__)
 
 def insert_new_job(job_data_dict: dict) -> Tuple[bool, str]:
     """
@@ -19,8 +23,13 @@ def insert_new_job(job_data_dict: dict) -> Tuple[bool, str]:
                 clean_dict = {k: v for k, v in job_data_dict.items() if v is not None and v != ''}
                 client.table('jobs').insert(clean_dict).execute()
                 return True, "✅ Job application saved successfully to Supabase!"
-            except Exception as e:
-                return False, f"Database error saving job: {str(e)}"
+            except Exception as exc:
+                logger.error(
+                    "Saving new job failed: field_count=%s error_type=%s",
+                    len(clean_dict),
+                    type(exc).__name__,
+                )
+                return False, "Unable to save the job to the database right now."
 
     # Local fallback update for demo mode
     new_id = max([j.get('id', 0) for j in DEFAULT_MOCK_DATA] + [0]) + 1

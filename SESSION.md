@@ -11,6 +11,8 @@
 - OAuth client credentials and tokens stay under ignored `.local/` storage.
 - The scheduled delivery script requires live Supabase data and refuses to send demo data.
 - The Weekly Digest dashboard view was smoke-tested without authorizing Gmail or sending an email.
+- Application logging now performs process-wide post-interpolation credential redaction, defaults the root logger to `INFO`, and restricts HTTP, Supabase/PostgREST, and Google client namespaces to `WARNING`.
+- Supabase and editor failure paths now emit metadata-only operational diagnostics and stable user-facing errors rather than raw exceptions, payloads, responses, or session-state values.
 - No branch push, pull request, Gmail authorization, live digest delivery, or `launchd` installation has been performed.
 
 ## Validation
@@ -18,13 +20,15 @@
 The following checks passed after the final implementation changes:
 
 ```text
-62 passed, 61 warnings in 16.07s
+Focused security tests: 36 passed, 1 warning in 0.89s
+Full suite: 80 passed, 59 warnings in 13.40s
 python -m compileall: passed
 git diff --check: passed
+Credential-diagnostic source audit: passed with no matches
 Streamlit Weekly Digest smoke test: passed
 ```
 
-The Streamlit smoke test confirmed six metrics, the Markdown preview, and the download button rendered without exceptions. Gmail delivery code was not invoked.
+The credential-diagnostic audit found no remaining raw session-state, payload/response, authorization-header, or Supabase exception diagnostics in the audited application paths. The Streamlit smoke test confirmed six metrics, the Markdown preview, and the download button rendered without exceptions. Gmail delivery code was not invoked.
 
 The remaining warnings are non-blocking dependency deprecations involving PyPDF2 and Supabase client `timeout`/`verify` parameters.
 
@@ -33,11 +37,12 @@ The remaining warnings are non-blocking dependency deprecations involving PyPDF2
 - Do not commit `.env`, `.local/`, OAuth client JSON, OAuth tokens, logs, database files, generated digests, personal email addresses, or real resumes.
 - A Supabase service-role credential appeared in earlier verbose test output. Treat it as compromised: rotate it in Supabase, update the ignored local `.env`, and revoke the old credential.
 - Unit-test isolation was hardened so the add-job fallback test cannot use live Supabase configuration.
+- Security regression tests use synthetic credentials to verify redaction of known secrets, authorization and API-key fields, OAuth tokens, JWT-like values, interpolated arguments, and traceback output.
 - Do not run `scripts/send_weekly_digest.py` until the sender, recipient, generated digest, and live-delivery intent have been confirmed; it sends a real email.
 
 ## Next Actions
 
-1. Rotate the compromised Supabase service-role credential and review HTTP logging for credential disclosure.
+1. Rotate the compromised Supabase service-role credential, update the ignored local `.env`, and revoke the old credential.
 2. Push `feature/claude-private-gmail-digest` and open a pull request when ready.
 3. Configure `WEEKLY_DIGEST_SENDER` and `WEEKLY_DIGEST_RECIPIENT` in the ignored `.env`.
 4. Place the Google desktop OAuth client at `.local/google-oauth-client.json` and run `scripts/authorize_gmail.py`.

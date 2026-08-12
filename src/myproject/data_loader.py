@@ -134,8 +134,12 @@ def update_job_details(job_id: int, match_analysis: str, description: str) -> bo
         import streamlit as st
         st.cache_data.clear()
         return True
-    except Exception as e:
-        logger.error("Error updating job %s: %s", job_id, e)
+    except Exception as exc:
+        logger.error(
+            "Updating job details failed: job_id=%s error_type=%s",
+            job_id,
+            type(exc).__name__,
+        )
         return False
 
 def update_job_status_and_notes(job_id: int, new_status: str, interview_notes: str) -> bool:
@@ -166,8 +170,13 @@ def update_job_status_and_notes(job_id: int, new_status: str, interview_notes: s
 
             st.cache_data.clear()
             return True
-        except Exception as e:
-            if "PGRST204" in str(e) or "is_manually_overridden" in str(e) or "updated_at" in str(e):
+        except Exception as exc:
+            error_text = str(exc)
+            if (
+                "PGRST204" in error_text
+                or "is_manually_overridden" in error_text
+                or "updated_at" in error_text
+            ):
                 try:
                     client.table('jobs').update({
                         'status': new_status,
@@ -175,10 +184,18 @@ def update_job_status_and_notes(job_id: int, new_status: str, interview_notes: s
                     }).eq('id', clean_id).select('id,status').execute()
                     st.cache_data.clear()
                     return True
-                except Exception as fallback_err:
-                    logger.error("Fallback update error for job %s: %s", clean_id, fallback_err)
+                except Exception as fallback_exc:
+                    logger.error(
+                        "Fallback job status update failed: job_id=%s error_type=%s",
+                        clean_id,
+                        type(fallback_exc).__name__,
+                    )
                     return False
-            logger.error("Error updating job %s in Supabase: %s", clean_id, e)
+            logger.error(
+                "Job status update failed: job_id=%s error_type=%s",
+                clean_id,
+                type(exc).__name__,
+            )
             return False
 
     st.cache_data.clear()
@@ -211,14 +228,24 @@ def sync_table_changes(table_name: str, original_df: pd.DataFrame, changes_dict:
 
         st.cache_data.clear()
         return True, "Synced successfully!"
-    except Exception as e:
-        return False, f"Sync error: {str(e)}"
+    except Exception as exc:
+        logger.error(
+            "Table synchronization failed: table=%s update_count=%s "
+            "delete_count=%s addition_count=%s error_type=%s",
+            table_name,
+            len(changes_dict.get("edited_rows", {})),
+            len(changes_dict.get("deleted_rows", [])),
+            len(changes_dict.get("added_rows", [])),
+            type(exc).__name__,
+        )
+        return False, "Unable to synchronize these changes right now."
 
 def migrate_historical_to_live() -> Tuple[bool, str, int]:
     """Migrates all records from job_applications to jobs."""
     client = get_supabase_client()
     if not client:
         return False, "Not connected to Supabase.", 0
+    migrated_count = 0
     try:
         # 1. Fetch all historical applications
         response = client.table('job_applications').select('*').execute()
@@ -228,7 +255,6 @@ def migrate_historical_to_live() -> Tuple[bool, str, int]:
             return True, "No historical data to migrate.", 0
             
         # 2. Map and insert into jobs table
-        migrated_count = 0
         for app in historical_apps:
             new_job = {
                 'company': app.get('company'),
@@ -249,8 +275,13 @@ def migrate_historical_to_live() -> Tuple[bool, str, int]:
             migrated_count += 1
             
         return True, f"Successfully migrated {migrated_count} records.", migrated_count
-    except Exception as e:
-        return False, f"Migration failed: {str(e)}", 0
+    except Exception as exc:
+        logger.error(
+            "Historical application migration failed: migrated_count=%s error_type=%s",
+            migrated_count,
+            type(exc).__name__,
+        )
+        return False, "Unable to migrate historical applications right now.", 0
 
 def sanitize_job_data(df: pd.DataFrame) -> pd.DataFrame:
     """Sanitize job dataframe to guarantee required columns and expected data types."""
@@ -377,9 +408,16 @@ def load_job_data() -> Tuple[pd.DataFrame, bool, str]:
 
         sanitized = sanitize_job_data(combined_df)
         return sanitized, True, "Connected to Supabase."
-    except Exception as e:
-        error_msg = f"Using Demo Data: Unable to reach Supabase database ({str(e)})."
-        return get_mock_job_data(), False, error_msg
+    except Exception as exc:
+        logger.error(
+            "Loading Supabase job data failed: error_type=%s",
+            type(exc).__name__,
+        )
+        return (
+            get_mock_job_data(),
+            False,
+            "Using Demo Data: Unable to reach the Supabase database.",
+        )
 
 def fuzzy_match_applications(jobs_df: pd.DataFrame, apps_df: pd.DataFrame) -> pd.DataFrame:
     """Fuzzy match job_applications to jobs based on company and title."""
@@ -463,11 +501,15 @@ def load_historical_data(jobs_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFr
             log_staleness_diagnostics(events_df)
             
         return apps_df, events_df
-    except Exception as e:
+    except Exception as exc:
+        logger.error(
+            "Loading historical application data failed: error_type=%s",
+            type(exc).__name__,
+        )
         return pd.DataFrame(), pd.DataFrame()
 
 def log_staleness_diagnostics(events_df: pd.DataFrame, company_filter: Optional[str] = None) -> None:
-    """Diagnostic logger for application events to trace raw event_date and calculated staleness_days."""
+    """Log metadata-only staleness diagnostics for application events."""
     if events_df is None or not isinstance(events_df, pd.DataFrame) or events_df.empty or 'company' not in events_df.columns:
         return
     
@@ -480,31 +522,35 @@ def log_staleness_diagnostics(events_df: pd.DataFrame, company_filter: Optional[
     if target_events.empty:
         return
 
-    import logging as _stdlib_logging  # noqa: F401 — kept for any external callers of logging.root
-    date_col = next((c for c in ['created_at', 'event_date', 'date', 'timestamp'] if c in target_events.columns), None)
-    _diag_logger = get_logger(__name__)
-
-    
-    for idx, row in target_events.iterrows():
-        raw_date = row.get(date_col) if date_col else None
-        formatted_age = format_staleness(raw_date)
-        staleness_days = None
-        
-        if pd.notnull(raw_date):
+    date_col = next(
+        (
+            column
+            for column in ['created_at', 'event_date', 'date', 'timestamp']
+            if column in target_events.columns
+        ),
+        None,
+    )
+    dated_event_count = 0
+    invalid_date_count = 0
+    if date_col:
+        for raw_date in target_events[date_col]:
+            if pd.isnull(raw_date) or raw_date == "":
+                continue
             try:
-                dt = pd.to_datetime(raw_date)
-                now = pd.Timestamp.now(tz=dt.tz) if dt.tzinfo is not None else pd.Timestamp.now()
-                staleness_days = (now - dt).total_seconds() / 86400.0
+                pd.to_datetime(raw_date)
+                dated_event_count += 1
             except Exception:
-                staleness_days = None
-                
-        days_str = f"{staleness_days:.2f}d" if staleness_days is not None else "N/A"
-        _diag_logger.info(
-            "[DIAGNOSTIC - Event] App ID: %s, Company: '%s', Raw Date: '%s', "
-            "Staleness Days: %s, Formatted Age: '%s'",
-            row.get('application_id'), row.get('company'), raw_date,
-            days_str, formatted_age
-        )
+                invalid_date_count += 1
+
+    logger.info(
+        "[DIAGNOSTIC - Event] event_count=%s date_field=%s "
+        "dated_event_count=%s invalid_date_count=%s company_filter_applied=%s",
+        len(target_events),
+        date_col or "none",
+        dated_event_count,
+        invalid_date_count,
+        bool(company_filter),
+    )
 
 def log_torc_diagnostics(events_df: pd.DataFrame) -> None:
     """Backwards compatible wrapper for Torc events diagnostic logging."""
@@ -603,8 +649,11 @@ def load_discovered_jobs() -> pd.DataFrame:
             df['posted_at'] = pd.to_datetime(df['posted_at'], errors='coerce', utc=True)
             df = df.sort_values('posted_at', ascending=False)
         return df.reset_index(drop=True)
-    except Exception as e:
-        logger.error("Error loading discovered jobs: %s", e)
+    except Exception as exc:
+        logger.error(
+            "Loading discovered jobs failed: error_type=%s",
+            type(exc).__name__,
+        )
         return pd.DataFrame()
 
 
@@ -641,9 +690,13 @@ def add_discovered_to_tracker(
         import streamlit as st
         st.cache_data.clear()
         return True, f"✅ '{job_title}' at {company} added to Job Tracker!"
-    except Exception as e:
-        logger.error("Error adding discovered job %s to tracker: %s", queue_id, e)
-        return False, f"Error: {e}"
+    except Exception as exc:
+        logger.error(
+            "Promoting discovered job failed: queue_id=%s error_type=%s",
+            queue_id,
+            type(exc).__name__,
+        )
+        return False, "Unable to add the discovered job to the tracker right now."
 
 
 def dismiss_discovered_jobs(queue_ids: list) -> Tuple[bool, str]:
@@ -664,6 +717,10 @@ def dismiss_discovered_jobs(queue_ids: list) -> Tuple[bool, str]:
         import streamlit as st
         st.cache_data.clear()
         return True, f"Dismissed {len(queue_ids)} job(s)."
-    except Exception as e:
-        logger.error("Error dismissing discovered jobs %s: %s", queue_ids, e)
-        return False, f"Error: {e}"
+    except Exception as exc:
+        logger.error(
+            "Dismissing discovered jobs failed: queue_count=%s error_type=%s",
+            len(queue_ids),
+            type(exc).__name__,
+        )
+        return False, "Unable to dismiss the selected jobs right now."

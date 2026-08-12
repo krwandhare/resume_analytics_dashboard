@@ -276,8 +276,15 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 else:
                                     st.toast("✅ Saved changes!")
                                     st.rerun()
-                            except Exception as e:
-                                st.error(f"Error saving: {e}")
+                            except Exception as exc:
+                                logger.error(
+                                    "Saving job editor changes failed: error_type=%s",
+                                    type(exc).__name__,
+                                )
+                                st.error(
+                                    "Unable to save job changes right now. "
+                                    "Please retry in a moment."
+                                )
                     else:
                         st.info("No changes to save.")
         else:
@@ -466,20 +473,6 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                 )
                 
                 if st.form_submit_button("💾 Save Interview Changes", type="primary"):
-                    debug_info = {
-                        "active_editor_key": editor_key,
-                        "session_editor_keys": {k: str(st.session_state[k]) for k in st.session_state.keys() if "editor" in k or "grid" in k},
-                        "target_record_id": None,
-                        "source_table": None,
-                        "update_payload": None,
-                        "supabase_response": None
-                    }
-                    logger.debug("=== DEBUG: SAVE BUTTON CLICKED ===")
-                    logger.debug("SESSION KEYS: %s", list(st.session_state.keys()))
-                    for k in list(st.session_state.keys()):
-                        if "editor" in k or "grid" in k:
-                            logger.debug("KEY [%s]: %s", k, st.session_state[k])
-
                     changes = st.session_state.get(editor_key, {})
                     if not changes or not any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
                         for k in list(st.session_state.keys()):
@@ -488,10 +481,15 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 if any(len(v) > 0 for v in candidate_changes.values() if isinstance(v, (list, dict))):
                                     changes = candidate_changes
                                     break
-                    logger.debug("EDITED ROWS DATA: %s", st.session_state.get("interviews_editor", st.session_state.get("jobs_editor", changes)))
                     if any(len(v) > 0 for v in changes.values() if isinstance(v, (list, dict))):
-                        from myproject.data_loader import get_supabase_client, update_job_status_and_notes
+                        from myproject.data_loader import get_supabase_client
                         client = get_supabase_client()
+                        logger.info(
+                            "Saving interview editor changes: updates=%s deletes=%s additions=%s",
+                            len(changes.get("edited_rows", {})),
+                            len(changes.get("deleted_rows", [])),
+                            len(changes.get("added_rows", [])),
+                        )
                         try:
                             # Deletes
                             for idx_val in changes.get("deleted_rows", []):
@@ -499,13 +497,14 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                 row = display_df.iloc[idx]
                                 if pd.notna(row['_id']):
                                     target_id = int(float(row['_id']))
-                                    debug_info["target_record_id"] = target_id
-                                    debug_info["source_table"] = str(row['_source_table'])
-                                    logger.debug("Deleting row ID %s from table %s", target_id, row['_source_table'])
+                                    source_tbl = str(row['_source_table'])
                                     if client:
-                                        res = client.table(str(row['_source_table'])).delete().eq('id', target_id).execute()
-                                        debug_info["supabase_response"] = str(res)
-                                        logger.debug("SUPABASE DELETE PAYLOAD & RES: %s", res)
+                                        client.table(source_tbl).delete().eq('id', target_id).execute()
+                                        logger.info(
+                                            "Deleted interview record: table=%s id=%s",
+                                            source_tbl,
+                                            target_id,
+                                        )
 
                             # Updates
                             for idx_val, edits in changes.get("edited_rows", {}).items():
@@ -545,67 +544,86 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                         else:
                                             clean_edits['applied_at'] = db_val
 
-                                debug_info["target_record_id"] = target_id
-                                debug_info["source_table"] = source_tbl
-                                debug_info["update_payload"] = clean_edits
-                                logger.debug("Target row ID: %s | Table: %s | Payload: %s", target_id, source_tbl, clean_edits)
-
                                 if clean_edits:
+                                    changed_fields = sorted(clean_edits)
                                     # job_applications has a CHECK constraint requiring lowercase status values.
                                     # jobs table accepts any case, so we only normalize for job_applications.
                                     if source_tbl == 'job_applications' and 'status' in clean_edits and clean_edits['status']:
                                         clean_edits['status'] = clean_edits['status'].lower()
-                                        logger.debug("Normalized status to lowercase for job_applications: %r", clean_edits['status'])
 
                                     if client:
                                         try:
                                             res = client.table(source_tbl).update(clean_edits).eq('id', target_id).select('id,status').execute()
-                                            
+
                                             # Sync status change to main 'jobs' table when source is job_applications.
                                             # Use linked_job_id (jobs.id) — NOT target_id (job_applications.id).
                                             if source_tbl != 'jobs' and clean_edits.get('status') and linked_job_id:
                                                 try:
                                                     client.table('jobs').update({'status': clean_edits['status']}).eq('id', linked_job_id).select('id,status').execute()
                                                 except Exception as parent_sync_err:
-                                                    logger.debug("Parent jobs table sync notice (jobs.id=%s): %s", linked_job_id, parent_sync_err)
+                                                    logger.warning(
+                                                        "Parent job status sync failed: jobs.id=%s error_type=%s",
+                                                        linked_job_id,
+                                                        type(parent_sync_err).__name__,
+                                                    )
 
                                             if hasattr(res, 'data') and (res.data is None or len(res.data) == 0):
                                                 warn_msg = (
-                                                    f"⚠️ Warning: Update returned empty data array (data=[]).\n"
-                                                    f"Table: {source_tbl} | ID: {target_id} | Payload: {clean_edits}\n"
-                                                    f"Possible causes: RLS policy blocking write, or record ID {target_id} does not exist in '{source_tbl}'."
+                                                    "⚠️ The database did not confirm this update. "
+                                                    "The record may be missing or blocked by access policy."
                                                 )
-                                                debug_info["supabase_response"] = f"Response: {res} | {warn_msg}"
-                                                logger.warning(warn_msg)
+                                                logger.warning(
+                                                    "Interview update returned no rows: table=%s id=%s fields=%s",
+                                                    source_tbl,
+                                                    target_id,
+                                                    changed_fields,
+                                                )
                                                 st.warning(warn_msg)
                                             else:
-                                                debug_info["supabase_response"] = f"✅ Updated row ID {target_id} in {source_tbl}: {res.data}"
-                                            logger.debug("SUPABASE UPDATE PAYLOAD & RES: %s", res)
+                                                logger.info(
+                                                    "Updated interview record: table=%s id=%s fields=%s",
+                                                    source_tbl,
+                                                    target_id,
+                                                    changed_fields,
+                                                )
                                         except Exception as update_err:
-                                            debug_info["supabase_response"] = f"Error: {update_err}"
-                                            logger.error("Supabase update error (table=%s, id=%s, payload=%s): %s", source_tbl, target_id, clean_edits, update_err)
+                                            logger.error(
+                                                "Interview update failed: table=%s id=%s fields=%s error_type=%s",
+                                                source_tbl,
+                                                target_id,
+                                                changed_fields,
+                                                type(update_err).__name__,
+                                            )
                                             if "PGRST204" in str(update_err):
                                                 err_msg = str(update_err)
                                                 for bad_col in ['notes', 'interview_date', 'match_analysis', 'rejection_reason', 'is_manually_overridden']:
                                                     if bad_col in err_msg:
                                                         clean_edits.pop(bad_col, None)
                                                 if clean_edits:
+                                                    fallback_fields = sorted(clean_edits)
                                                     res = client.table(source_tbl).update(clean_edits).eq('id', target_id).select('id,status').execute()
                                                     if hasattr(res, 'data') and (res.data is None or len(res.data) == 0):
                                                         warn_msg = (
-                                                            f"⚠️ Warning: Fallback update returned empty data (data=[]).\n"
-                                                            f"Table: {source_tbl} | ID: {target_id} | Record not found or blocked by RLS."
+                                                            "⚠️ The database did not confirm this update. "
+                                                            "The record may be missing or blocked by access policy."
                                                         )
-                                                        debug_info["supabase_response"] = f"Response: {res} | {warn_msg}"
-                                                        logger.warning(warn_msg)
+                                                        logger.warning(
+                                                            "Interview fallback update returned no rows: table=%s id=%s fields=%s",
+                                                            source_tbl,
+                                                            target_id,
+                                                            fallback_fields,
+                                                        )
                                                         st.warning(warn_msg)
                                                     else:
-                                                        debug_info["supabase_response"] = f"✅ Updated row ID {target_id}: {res.data}"
-                                                    logger.debug("SUPABASE FALLBACK PAYLOAD & RES: %s", res)
+                                                        logger.info(
+                                                            "Updated interview record with schema fallback: table=%s id=%s fields=%s",
+                                                            source_tbl,
+                                                            target_id,
+                                                            fallback_fields,
+                                                        )
                                             else:
                                                 raise update_err
 
-                            st.session_state["save_debug_info"] = debug_info
                             for k in list(st.session_state.keys()):
                                 if k.startswith("data_editor_grid_") or k.startswith("interviews_grid_") or k.startswith("overview_interviews_"):
                                     st.session_state.pop(k, None)
@@ -614,15 +632,17 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                             st.success("Successfully updated Supabase!")
                             st.toast("✅ Saved interview changes!")
                             st.rerun()
-                        except Exception as e:
-                            st.session_state["save_debug_info"] = debug_info
-                            st.error(f"Error saving changes: {e}")
+                        except Exception as save_err:
+                            logger.error(
+                                "Saving interview changes failed: error_type=%s",
+                                type(save_err).__name__,
+                            )
+                            st.error(
+                                "Unable to save interview changes right now. "
+                                "Please retry in a moment."
+                            )
                     else:
                         st.info("No changes to save.")
-
-            if "save_debug_info" in st.session_state:
-                with st.expander("🔍 Mobile Diagnostic Logs (Save Response & Payload)", expanded=True):
-                    st.json(st.session_state["save_debug_info"])
         else:
             st.info("No Interviewing applications found.")
 
