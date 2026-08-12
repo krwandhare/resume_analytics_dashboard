@@ -1,5 +1,6 @@
 import datetime
 import streamlit as st
+from myproject.statuses import STATUS_OPTIONS
 import pandas as pd
 from typing import Tuple
 from myproject.data_loader import get_supabase_client, is_valid_supabase_config, DEFAULT_MOCK_DATA
@@ -39,7 +40,7 @@ def render_add_job_form_content() -> None:
             job_title = st.text_input("Job Title *", placeholder="e.g. Senior Software Engineer", help="Position or role title")
             company = st.text_input("Company Name *", placeholder="e.g. Google", help="Target company")
             location = st.text_input("Location", value="Remote", placeholder="e.g. San Francisco, CA or Remote")
-            status = st.selectbox("Application Status", ["Applied", "Interviewing", "Offer Received", "Pending", "Rejected"])
+            status = st.selectbox("Application Status", STATUS_OPTIONS)
             
         with col2:
             posted_at = st.date_input("Applied Date", value=datetime.date.today())
@@ -87,4 +88,3 @@ def render_add_job_form(in_dialog: bool = False) -> None:
     else:
         with st.expander("➕ Add New Job Application", expanded=False):
             render_add_job_form_content()
-

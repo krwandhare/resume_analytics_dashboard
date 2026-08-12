@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from myproject.statuses import STATUS_COLORS, canonicalize_status
 
 def generate_analytics(job_data: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: pd.DataFrame = None) -> None:
     """Generate visual analytics in a clean 2x2 grid layout."""
@@ -16,19 +17,6 @@ def generate_analytics(job_data: pd.DataFrame, events_df: pd.DataFrame = None, a
         - **Timeline Slowdowns:** If your application volume drops over time, you might need to broaden your search criteria or set a daily goal.
         """)
 
-    # Semantic Color Palette
-    STATUS_COLORS = {
-        'Hired': '#10B981',
-        'Offer Received': '#34D399',
-        'Offer': '#34D399',
-        'Interviewing': '#F59E0B',
-        'Reviewing': '#60A5FA',
-        'Applied': '#3B82F6',
-        'Pending': '#93C5FD',
-        'Rejected': '#EF4444',
-        'Unknown': '#6B7280'
-    }
-
     # Row 1: Active Landscape (Pie Chart) & Match Score Distribution (Histogram)
     r1_col1, r1_col2 = st.columns(2)
 
@@ -38,7 +26,7 @@ def generate_analytics(job_data: pd.DataFrame, events_df: pd.DataFrame = None, a
         
         if 'status' in job_data.columns and not job_data['status'].dropna().empty:
             status_df = job_data.copy()
-            status_df['status'] = status_df['status'].astype(str).str.title()
+            status_df['status'] = status_df['status'].map(canonicalize_status)
             status_counts = status_df['status'].value_counts().reset_index()
             status_counts.columns = ['Status', 'Count']
             
@@ -198,5 +186,4 @@ def generate_analytics(job_data: pd.DataFrame, events_df: pd.DataFrame = None, a
             st.plotly_chart(fig_velocity, width="stretch")
         else:
             st.info("No dated application records available for momentum analytics.")
-
 
