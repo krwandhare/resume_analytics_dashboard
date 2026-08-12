@@ -3,9 +3,11 @@ import time
 import urllib.request
 import urllib.parse
 import pandas as pd
+import streamlit as st
 from typing import Tuple, Dict, Any, Optional
 from supabase import create_client, Client
 from myproject.logger import get_logger
+from myproject.statuses import canonicalize_status
 
 logger = get_logger(__name__)
 
@@ -145,22 +147,22 @@ def update_job_status_and_notes(job_id: int, new_status: str, interview_notes: s
     now_str = datetime.now(timezone.utc).isoformat()
     client = get_supabase_client()
 
-    # Update mock/session state override store
-    MOCK_OVERRIDE_STORE[clean_id] = {
-        'status': new_status,
-        'match_analysis': interview_notes,
+    # Only include non-None values
+    payload = {
         'updated_at': now_str,
         'is_manually_overridden': True
     }
+    if new_status is not None:
+        payload['status'] = new_status
+    if interview_notes is not None:
+        payload['match_analysis'] = interview_notes
+
+    # Update mock/session state override store
+    MOCK_OVERRIDE_STORE[clean_id] = payload
 
     if client:
         try:
-            client.table('jobs').update({
-                'status': new_status,
-                'match_analysis': interview_notes,
-                'updated_at': now_str,
-                'is_manually_overridden': True
-            }).eq('id', clean_id).select('id,status').execute()
+            client.table('jobs').update(payload).eq('id', clean_id).select('id,status').execute()
 
             st.cache_data.clear()
             return True
@@ -373,12 +375,8 @@ def load_job_data() -> Tuple[pd.DataFrame, bool, str]:
         if combined_df.empty:
             return get_mock_job_data(), False, "Connected to Supabase, but no records found in 'jobs' or 'job_applications' tables."
 
-        # Deduplicate records by company + title if needed
-        if 'company' in combined_df.columns and 'job_title' in combined_df.columns:
-            combined_df = combined_df.drop_duplicates(subset=['company', 'job_title'], keep='first')
-
         sanitized = sanitize_job_data(combined_df)
-        return sanitized, True, f"Connected to Supabase: Showing {len(sanitized)} live job records."
+        return sanitized, True, "Connected to Supabase."
     except Exception as e:
         error_msg = f"Using Demo Data: Unable to reach Supabase database ({str(e)})."
         return get_mock_job_data(), False, error_msg
@@ -528,7 +526,7 @@ def unify_job_statuses(jobs_df: pd.DataFrame, apps_df: pd.DataFrame) -> pd.DataF
     )
     
     # Normalize string casing to ensure title case for UI 
-    jobs_df['status'] = jobs_df['status'].astype(str).str.title()
+    jobs_df['status'] = jobs_df['status'].map(canonicalize_status)
     
     return jobs_df
 
@@ -565,3 +563,107 @@ def format_staleness(raw_value) -> str:
     except Exception:
         return "⚪ Unknown"
 
+
+@st.cache_data(ttl=60, max_entries=1, show_spinner=False)
+def load_discovered_jobs() -> pd.DataFrame:
+    """
+    Fetch unresolved records from job_review_queue, sorted newest-first.
+    Returns an empty DataFrame when Supabase is unreachable or unconfigured.
+    """
+    is_valid, _ = is_valid_supabase_config()
+    if not is_valid:
+        return pd.DataFrame()
+    try:
+        client = get_supabase_client()
+        if not client:
+            return pd.DataFrame()
+        response = (
+            client.table('job_review_queue')
+            .select('*')
+            .is_('resolved_at', 'null')
+            .order('discovered_at', desc=True)
+            .limit(200)
+            .execute()
+        )
+        rows = response.data or []
+        if not rows:
+            return pd.DataFrame()
+        df = pd.DataFrame(rows)
+        # Rename to match the shared jobs schema used across the dashboard
+        df = df.rename(columns={
+            'title': 'job_title',
+            'source_url': 'job_url',
+            'discovered_at': 'posted_at',
+        })
+        # Keep a defensive client-side filter in case the backend schema changes.
+        if 'resolved_at' in df.columns:
+            df = df[df['resolved_at'].isna()].copy()
+        # Sort newest first
+        if 'posted_at' in df.columns:
+            df['posted_at'] = pd.to_datetime(df['posted_at'], errors='coerce', utc=True)
+            df = df.sort_values('posted_at', ascending=False)
+        return df.reset_index(drop=True)
+    except Exception as e:
+        logger.error("Error loading discovered jobs: %s", e)
+        return pd.DataFrame()
+
+
+def add_discovered_to_tracker(
+    queue_id: int,
+    job_title: str,
+    company: str,
+    match_score: float,
+    notes: str,
+    job_url: str,
+) -> Tuple[bool, str]:
+    """
+    Promote a job_review_queue entry into the jobs table and mark it resolved.
+    Returns (success: bool, message: str).
+    """
+    from datetime import datetime, timezone
+    client = get_supabase_client()
+    if not client:
+        return False, "Not connected to Supabase."
+    try:
+        now_str = datetime.now(timezone.utc).isoformat()
+        client.table('jobs').insert({
+            'job_title': job_title.strip(),
+            'company': company.strip(),
+            'match_score': float(match_score),
+            'match_analysis': notes.strip() if notes else '',
+            'job_url': job_url.strip() if job_url else '',
+            'status': 'Applied',
+            'first_seen_at': now_str,
+        }).execute()
+        client.table('job_review_queue').update(
+            {'resolved_at': now_str}
+        ).eq('id', int(queue_id)).execute()
+        import streamlit as st
+        st.cache_data.clear()
+        return True, f"✅ '{job_title}' at {company} added to Job Tracker!"
+    except Exception as e:
+        logger.error("Error adding discovered job %s to tracker: %s", queue_id, e)
+        return False, f"Error: {e}"
+
+
+def dismiss_discovered_jobs(queue_ids: list) -> Tuple[bool, str]:
+    """
+    Mark one or more job_review_queue entries as resolved (dismissed).
+    Returns (success: bool, message: str).
+    """
+    from datetime import datetime, timezone
+    client = get_supabase_client()
+    if not client:
+        return False, "Not connected to Supabase."
+    try:
+        now_str = datetime.now(timezone.utc).isoformat()
+        for qid in queue_ids:
+            client.table('job_review_queue').update(
+                {'resolved_at': now_str}
+            ).eq('id', int(qid)).execute()
+        import streamlit as st
+        st.cache_data.clear()
+        return True, f"Dismissed {len(queue_ids)} job(s)."
+    except Exception as e:
+        logger.error("Error dismissing discovered jobs %s: %s", queue_ids, e)
+        return False, f"Error: {e}"

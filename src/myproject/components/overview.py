@@ -3,6 +3,13 @@ import pandas as pd
 import urllib.parse
 from myproject.data_loader import format_staleness
 from myproject.logger import get_logger
+from myproject.statuses import (
+    ACTIVE_STATUSES,
+    INTERVIEW_STATUSES,
+    OFFER_STATUSES,
+    PRE_APPLICATION_STATUSES,
+    STATUS_OPTIONS,
+)
 
 logger = get_logger(__name__)
 
@@ -31,7 +38,7 @@ def get_match_label(score):
 
 def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: pd.DataFrame = None) -> None:
     """Render high-level overview metrics."""
-    st.subheader(":material/dashboard: Job Pipeline Overview")
+    st.markdown("<h3 style='margin-top: -0.5rem; margin-bottom: 0.5rem;'> <span class='material-symbols-outlined' style='vertical-align: middle;'>dashboard</span> Job Pipeline Overview</h3>", unsafe_allow_html=True)
 
     if df.empty:
         st.info("No matching records found for the selected filters.")
@@ -49,19 +56,23 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
         
     total_companies = df['company'].nunique() if 'company' in df.columns else 0
     
-    pending_count = len(df[df['status'].str.lower().isin(['applied', 'pending', 'reviewing'])]) if 'status' in df.columns else 0
+    pending_count = len(df[df['status'].str.lower().isin(ACTIVE_STATUSES)]) if 'status' in df.columns else 0
     
     if events_df is not None and not events_df.empty and 'event_type' in events_df.columns and 'application_id' in events_df.columns:
-        interview_events = events_df[events_df['event_type'].astype(str).str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]
+        interview_events = events_df[events_df['event_type'].astype(str).str.lower().isin(INTERVIEW_STATUSES)]
         total_interviews = interview_events['application_id'].nunique()
-        offer_events = events_df[events_df['event_type'].astype(str).str.lower().isin(['offer', 'offer received', 'hired'])]
+        offer_events = events_df[events_df['event_type'].astype(str).str.lower().isin(OFFER_STATUSES)]
         total_offers = offer_events['application_id'].nunique()
     else:
-        total_interviews = len(df[df['status'].str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]) if 'status' in df.columns else 0
-        total_offers = len(df[df['status'].str.lower().isin(['offer', 'offer received', 'hired'])]) if 'status' in df.columns else 0
+        total_interviews = len(df[df['status'].str.lower().isin(INTERVIEW_STATUSES)]) if 'status' in df.columns else 0
+        total_offers = len(df[df['status'].str.lower().isin(OFFER_STATUSES)]) if 'status' in df.columns else 0
+
+    total_applications = len(df[~df['status'].str.lower().isin(PRE_APPLICATION_STATUSES)]) if 'status' in df.columns else len(df)
+    if apps_df is not None and not apps_df.empty:
+        total_applications += len(hist_apps)
 
     # Calculate conversion metrics
-    app_to_interview_pct = (total_interviews / total_tracked * 100) if total_tracked > 0 else 0.0
+    app_to_interview_pct = (total_interviews / total_applications * 100) if total_applications > 0 else 0.0
     interview_to_offer_pct = (total_offers / total_interviews * 100) if total_interviews > 0 else 0.0
 
     if app_to_interview_pct >= 15.0:
@@ -120,35 +131,15 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
     .kpi-teal::before {{ background: linear-gradient(90deg, #14b8a6, #2dd4bf); }}
     </style>
     <div class="kpi-container">
-        <div class="kpi-card kpi-indigo">
-            <div class="kpi-title">📊 Total Jobs</div>
-            <div class="kpi-value">{total_tracked}</div>
-            <div class="kpi-desc">Tracked in pipeline</div>
-        </div>
-        <div class="kpi-card kpi-rose">
-            <div class="kpi-title">🎯 Avg Match</div>
-            <div class="kpi-value">{avg_match:.1f}%</div>
-            <div class="kpi-desc">ATS screen pass rate</div>
-        </div>
-        <div class="kpi-card kpi-emerald">
-            <div class="kpi-title">🎤 Interviews</div>
-            <div class="kpi-value">{total_interviews}</div>
-            <div class="kpi-desc">Reached interview stage</div>
-        </div>
         <div class="kpi-card kpi-purple">
             <div class="kpi-title">📈 App → Interview</div>
             <div class="kpi-value">{app_to_interview_pct:.1f}%</div>
-            <div class="kpi-desc">{app_to_int_badge} ({total_interviews}/{total_tracked})</div>
+            <div class="kpi-desc">{app_to_int_badge} ({total_interviews}/{total_applications})</div>
         </div>
         <div class="kpi-card kpi-teal">
             <div class="kpi-title">🏆 Interview → Offer</div>
             <div class="kpi-value">{interview_to_offer_pct:.1f}%</div>
             <div class="kpi-desc">{int_to_off_badge} ({total_offers}/{total_interviews if total_interviews > 0 else 0})</div>
-        </div>
-        <div class="kpi-card kpi-blue">
-            <div class="kpi-title">⏳ Active/Pending</div>
-            <div class="kpi-value">{pending_count}</div>
-            <div class="kpi-desc">Awaiting decision</div>
         </div>
     </div>
     """
@@ -317,7 +308,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
         
         if events_df is not None and not events_df.empty and 'event_type' in events_df.columns:
             # 1. Find all historical events that indicate an interview
-            interview_events = events_df[events_df['event_type'].astype(str).str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]
+            interview_events = events_df[events_df['event_type'].astype(str).str.lower().isin(['recruiter call', 'interviewing', 'offer', 'offer received', 'hired'])]
             
             if 'application_id' in interview_events.columns and not interview_events.empty:
                 # Aggregate to get latest interview date and round count
@@ -392,7 +383,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
         
         # 2. Append any live interviews that might not have historical events (e.g. manually added)
         jobs_only_df = df[df['_source_table'] == 'jobs'] if '_source_table' in df.columns else df
-        live_interviews = jobs_only_df[jobs_only_df['status'].str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]
+        live_interviews = jobs_only_df[jobs_only_df['status'].str.lower().isin(['recruiter call', 'interviewing', 'offer', 'offer received', 'hired'])]
         processed_companies = [r['Company'] for r in display_rows]
         for _, job in live_interviews.iterrows():
             company = job.get('company', 'Unknown')
@@ -465,7 +456,7 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                         "Sr No": st.column_config.NumberColumn(disabled=True),
                         "Company": st.column_config.TextColumn("Company"),
                         "Role": st.column_config.TextColumn("Role"),
-                        "Status": st.column_config.SelectboxColumn("Status", options=["Applied", "Interviewing", "Offer", "Rejected"]),
+                        "Status": st.column_config.SelectboxColumn("Status", options=STATUS_OPTIONS),
                         "Round": st.column_config.TextColumn("Round"),
                         "Interview Date": st.column_config.TextColumn("Interview Date"),
                         "Rejection Reason": st.column_config.TextColumn("Rejection Reason / Notes"),
@@ -566,13 +557,6 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                                         clean_edits['status'] = clean_edits['status'].lower()
                                         logger.debug("Normalized status to lowercase for job_applications: %r", clean_edits['status'])
 
-                                    # Fallback update to in-memory store for session consistency
-                                    update_job_status_and_notes(
-                                        target_id,
-                                        clean_edits.get('status'),
-                                        clean_edits.get('match_analysis') or clean_edits.get('rejection_reason')
-                                    )
-
                                     if client:
                                         try:
                                             res = client.table(source_tbl).update(clean_edits).eq('id', target_id).select('id,status').execute()
@@ -641,5 +625,4 @@ def render_overview(df: pd.DataFrame, events_df: pd.DataFrame = None, apps_df: p
                     st.json(st.session_state["save_debug_info"])
         else:
             st.info("No Interviewing applications found.")
-
 

@@ -1,4 +1,5 @@
 import streamlit as st
+from myproject.statuses import STATUS_OPTIONS, canonicalize_status
 import pandas as pd
 import urllib.parse
 
@@ -122,8 +123,8 @@ def render_insights(df: pd.DataFrame, apps_df: pd.DataFrame = None, key_prefix: 
                 with st.expander("✏️ Manual Status Override & Interview Notes", expanded=False):
                     with st.form(key=f"{key_prefix}_inline_edit_form_{selected_job['id']}"):
 
-                        status_options = ["Applied", "Reviewing", "Interviewing", "Offer Received", "Rejected", "Hired"]
-                        curr_status = str(selected_job.get('status', 'Applied')).title()
+                        status_options = STATUS_OPTIONS
+                        curr_status = canonicalize_status(selected_job.get('status', 'Applied'))
                         curr_idx = status_options.index(curr_status) if curr_status in status_options else 0
 
                         new_status = st.selectbox("Update Status", status_options, index=curr_idx, key=f"{key_prefix}_override_status_{selected_job['id']}")
@@ -176,5 +177,4 @@ def render_insights(df: pd.DataFrame, apps_df: pd.DataFrame = None, key_prefix: 
 
         else:
             st.info("Select an application from the left panel to inspect details.")
-
 

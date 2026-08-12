@@ -11,6 +11,7 @@ for _p in [_src_dir, _myproject_dir, _this_dir]:
 
 import streamlit as st
 import pandas as pd
+from myproject.statuses import ACTIVE_STATUSES, INTERVIEW_STATUSES
 
 try:
     from myproject.components.overview import render_overview
@@ -137,28 +138,65 @@ def render_overview_analytics_view(filtered_data: pd.DataFrame, events_df: pd.Da
 
     avg_match = filtered_data['match_score'].mean() if ('match_score' in filtered_data.columns and not filtered_data['match_score'].dropna().empty) else 0.0
 
-    pending_count = len(filtered_data[filtered_data['status'].str.lower().isin(['applied', 'pending', 'reviewing'])]) if 'status' in filtered_data.columns else 0
+    pending_count = len(filtered_data[filtered_data['status'].str.lower().isin(ACTIVE_STATUSES)]) if 'status' in filtered_data.columns else 0
 
     if events_df is not None and not events_df.empty and 'event_type' in events_df.columns and 'application_id' in events_df.columns:
-        interview_events = events_df[events_df['event_type'].astype(str).str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]
+        interview_events = events_df[events_df['event_type'].astype(str).str.lower().isin(INTERVIEW_STATUSES)]
         total_interviews = interview_events['application_id'].nunique()
     else:
-        total_interviews = len(filtered_data[filtered_data['status'].str.lower().isin(['interviewing', 'offer', 'offer received', 'hired'])]) if 'status' in filtered_data.columns else 0
+        total_interviews = len(filtered_data[filtered_data['status'].str.lower().isin(INTERVIEW_STATUSES)]) if 'status' in filtered_data.columns else 0
 
     # 1. Top 4-Column KPI Ribbon
-    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+    top_kpi_html = f"""
+    <style>
+    .top-kpi-container {{ display: flex; gap: 14px; margin-bottom: 24px; flex-wrap: wrap; }}
+    .top-kpi-card {{
+        flex: 1; min-width: 150px; padding: 18px 14px; border-radius: 14px;
+        background: rgba(30, 41, 59, 0.65);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4), inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+        text-align: center; font-family: 'Inter', -apple-system, sans-serif;
+        position: relative; overflow: hidden;
+    }}
+    .top-kpi-card::before {{
+        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 14px 14px 0 0;
+    }}
+    .top-kpi-card .kpi-title {{ font-size: 0.82em; font-weight: 600; color: #94A3B8; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.6px; }}
+    .top-kpi-card .kpi-value {{ font-size: 2.1em; font-weight: 700; color: #F8FAFC; margin-bottom: 4px; line-height: 1.1; font-family: 'Fira Code', monospace; }}
+    .top-kpi-card .kpi-desc {{ font-size: 0.76em; color: #64748B; font-weight: 400; }}
 
-    with kpi_col1:
-        st.metric(label="📊 Total Jobs", value=f"{total_tracked}", delta="Tracked in pipeline")
+    .kpi-indigo::before {{ background: linear-gradient(90deg, #6366f1, #818cf8); }}
+    .kpi-rose::before {{ background: linear-gradient(90deg, #f43f5e, #fb7185); }}
+    .kpi-emerald::before {{ background: linear-gradient(90deg, #10b981, #34d399); }}
+    .kpi-blue::before {{ background: linear-gradient(90deg, #3b82f6, #60a5fa); }}
+    </style>
 
-    with kpi_col2:
-        st.metric(label="🎯 Avg Match", value=f"{avg_match:.1f}%", delta="ATS screen rate")
-
-    with kpi_col3:
-        st.metric(label="🎤 Interviews", value=f"{total_interviews}", delta="Reached interview stage")
-
-    with kpi_col4:
-        st.metric(label="⏳ Active/Pending", value=f"{pending_count}", delta="Awaiting decision")
+    <div class="top-kpi-container">
+        <div class="top-kpi-card kpi-indigo">
+            <div class="kpi-title">📊 Total Jobs</div>
+            <div class="kpi-value">{total_tracked}</div>
+            <div class="kpi-desc">Tracked in pipeline</div>
+        </div>
+        <div class="top-kpi-card kpi-rose">
+            <div class="kpi-title">🎯 Avg Match</div>
+            <div class="kpi-value">{avg_match:.1f}%</div>
+            <div class="kpi-desc">ATS screen rate</div>
+        </div>
+        <div class="top-kpi-card kpi-emerald">
+            <div class="kpi-title">🎤 Interviews</div>
+            <div class="kpi-value">{total_interviews}</div>
+            <div class="kpi-desc">Reached interview stage</div>
+        </div>
+        <div class="top-kpi-card kpi-blue">
+            <div class="kpi-title">⏳ Active/Pending</div>
+            <div class="kpi-value">{pending_count}</div>
+            <div class="kpi-desc">Awaiting decision</div>
+        </div>
+    </div>
+    """
+    st.markdown(top_kpi_html, unsafe_allow_html=True)
 
     st.write("")
     st.divider()

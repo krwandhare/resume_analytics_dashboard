@@ -21,13 +21,15 @@ load_dotenv()
 from myproject.logger import configure_root_logging
 configure_root_logging()
 
-from myproject.data_loader import load_job_data, load_historical_data, unify_job_statuses
+from myproject.data_loader import load_job_data, load_historical_data, unify_job_statuses, load_discovered_jobs
 from myproject.components.sidebar import render_sidebar
 from myproject.views import (
     render_overview_analytics_view,
     render_job_tracker_view,
     render_ats_scorer_view,
-    render_admin_tools_view
+    render_admin_tools_view,
+    render_discovered_jobs_view,
+    render_weekly_digest_view,
 )
 
 def main():
@@ -238,6 +240,9 @@ button:hover, [data-testid*="baseButton"]:hover {
         # Unify statuses across dashboard
         job_data = unify_job_statuses(job_data, apps_df)
 
+        # Load discovered jobs (job_review_queue, unresolved only)
+        discovered_df = load_discovered_jobs()
+
     # Sidebar setup & filtering
     filtered_data, company_filter, status_filter = render_sidebar(job_data)
 
@@ -265,9 +270,11 @@ button:hover, [data-testid*="baseButton"]:hover {
         st.caption(f"🟡 {status_msg}")
 
     # Tabs navigation setup
-    tab_overview, tab_tracker, tab_ats, tab_admin = st.tabs([
+    tab_overview, tab_tracker, tab_digest, tab_discovered, tab_ats, tab_admin = st.tabs([
         "📊 Overview & Analytics",
         "📝 Job Tracker & Applications",
+        "📅 Weekly Digest",
+        "🔭 Discovered Jobs",
         "🎯 ATS Scorer",
         "⚙️ Admin & Tools"
     ])
@@ -277,6 +284,12 @@ button:hover, [data-testid*="baseButton"]:hover {
 
     with tab_tracker:
         render_job_tracker_view(filtered_data, apps_df)
+
+    with tab_digest:
+        render_weekly_digest_view(job_data, apps_df, events_df)
+
+    with tab_discovered:
+        render_discovered_jobs_view(discovered_df)
 
     with tab_ats:
         render_ats_scorer_view(filtered_data)
