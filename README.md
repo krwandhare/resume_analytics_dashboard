@@ -43,9 +43,19 @@ A Streamlit-based dashboard for visualizing and analyzing job application data s
     streamlit run src/myproject/main.py
     ```
 
+    Streamlit hot reload does not always refresh an already imported package namespace.
+    After adding a module or changing exports in a package `__init__.py`, stop and restart
+    the Streamlit process instead of relying on a browser refresh.
+
 ## Private weekly email delivery
 
-Weekly email delivery runs locally through macOS `launchd`. Supabase, SMTP, and recipient credentials remain in the ignored local `.env` file and are never uploaded to GitHub variables or Actions secrets.
+Weekly email delivery runs locally through the Gmail API and macOS `launchd`. Supabase settings remain in the ignored `.env` file, while Google OAuth client data and tokens remain under ignored `.local/`; none are uploaded to GitHub.
+
+Authorize Gmail send-only access once:
+
+```bash
+.venv/bin/python scripts/authorize_gmail.py
+```
 
 Test delivery locally with:
 
@@ -59,6 +69,7 @@ See [Private weekly digest automation](docs/weekly-digest.md) for credential req
 
 - `src/myproject/main.py`: Main Streamlit application entry point.
 - `src/myproject/analytics.py`: Visualization logic using Plotly.
-- `src/myproject/weekly_digest.py`: Weekly summary generation and SMTP delivery.
+- `src/myproject/weekly_digest.py`: Weekly summary generation and Gmail API delivery.
+- `scripts/authorize_gmail.py`: One-time Gmail desktop OAuth authorization.
 - `scripts/send_weekly_digest.py`: Local scheduled-delivery entry point.
 - `inspect_db.py`: Utility script for database inspection.

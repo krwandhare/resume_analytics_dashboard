@@ -24,11 +24,11 @@ configure_root_logging()
 from myproject.data_loader import load_job_data, load_historical_data, unify_job_statuses, load_discovered_jobs
 from myproject.components.sidebar import render_sidebar
 from myproject.views import (
-    render_overview_analytics_view,
-    render_job_tracker_view,
-    render_ats_scorer_view,
     render_admin_tools_view,
+    render_ats_scorer_view,
     render_discovered_jobs_view,
+    render_job_tracker_view,
+    render_overview_analytics_view,
     render_weekly_digest_view,
 )
 

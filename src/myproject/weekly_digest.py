@@ -5,12 +5,68 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
-import smtplib
+import base64
+import os
+from pathlib import Path
+import tempfile
 from typing import Iterable
 
 import pandas as pd
+from google.auth.exceptions import RefreshError, TransportError
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from httplib2 import HttpLib2Error
 
 from myproject.statuses import INTERVIEW_STATUSES, OFFER_STATUSES, PRE_APPLICATION_STATUSES
+
+
+GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+
+
+def _write_private_token(token_path: Path, token_json: str) -> None:
+    """Atomically persist an OAuth token with owner-only permissions."""
+    token_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary_name = tempfile.mkstemp(
+        dir=token_path.parent,
+        prefix=f".{token_path.name}.",
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as token_file:
+            token_file.write(token_json)
+            token_file.flush()
+            os.fsync(token_file.fileno())
+        os.replace(temporary_path, token_path)
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        temporary_path.unlink(missing_ok=True)
+        raise
+
+
+def authorize_gmail(client_path: str | Path, token_path: str | Path) -> Path:
+    """Run Google's desktop consent flow and persist send-only credentials."""
+    client_path = Path(client_path)
+    token_path = Path(token_path)
+    if not client_path.is_file():
+        raise RuntimeError(
+            f"Google OAuth desktop client credentials not found at {client_path}."
+        )
+    try:
+        flow = InstalledAppFlow.from_client_secrets_file(
+            str(client_path), [GMAIL_SEND_SCOPE]
+        )
+        credentials = flow.run_local_server(port=0, prompt="consent")
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"Could not authorize Gmail OAuth: {exc}") from exc
+    _write_private_token(token_path, credentials.to_json())
+    return token_path
 
 
 @dataclass(frozen=True)
@@ -85,7 +141,8 @@ def _application_rows(
             continue
         filtered = frame
         if "status" in filtered.columns:
-            filtered = filtered[~filtered["status"].astype(str).str.lower().isin(PRE_APPLICATION_STATUSES)]
+            normalized_statuses = filtered["status"].astype(str).str.strip().str.casefold()
+            filtered = filtered[~normalized_statuses.isin(PRE_APPLICATION_STATUSES)]
         frames.append(filtered)
     if not frames:
         return pd.DataFrame()
@@ -112,7 +169,7 @@ def build_weekly_digest(
     )
 
     event_statuses = (
-        current_events["event_type"].astype(str).str.lower()
+        current_events["event_type"].astype(str).str.strip().str.casefold()
         if "event_type" in current_events.columns
         else pd.Series(dtype="object")
     )
@@ -185,24 +242,58 @@ def render_digest_markdown(digest: WeeklyDigest) -> str:
 def send_digest_email(
     digest: WeeklyDigest,
     *,
-    smtp_host: str,
-    smtp_port: int,
-    smtp_username: str,
-    smtp_password: str,
+    token_path: str | Path,
     sender: str,
     recipient: str,
-    use_starttls: bool = True,
-) -> None:
-    """Deliver a digest through an explicitly configured SMTP account."""
+) -> dict:
+    """Deliver a digest with the Gmail API using locally stored OAuth credentials."""
+    sender = sender.strip()
+    if not sender:
+        raise RuntimeError("A weekly digest sender email address is required.")
+    recipient = recipient.strip()
+    if not recipient:
+        raise RuntimeError("A weekly digest recipient email address is required.")
+
+    token_path = Path(token_path)
+    if not token_path.is_file():
+        raise RuntimeError(
+            f"Gmail OAuth token not found at {token_path}. "
+            "Run scripts/authorize_gmail.py first."
+        )
+
+    try:
+        credentials = Credentials.from_authorized_user_file(
+            str(token_path), [GMAIL_SEND_SCOPE]
+        )
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"Could not load Gmail OAuth token at {token_path}: {exc}") from exc
+
+    if not credentials.valid:
+        if not credentials.expired or not credentials.refresh_token:
+            raise RuntimeError(
+                "Gmail OAuth consent is missing or revoked. "
+                "Run scripts/authorize_gmail.py again."
+            )
+        try:
+            credentials.refresh(Request())
+        except (RefreshError, TransportError) as exc:
+            raise RuntimeError(
+                "Gmail OAuth token refresh failed; consent may be revoked. "
+                "Run scripts/authorize_gmail.py again."
+            ) from exc
+        _write_private_token(token_path, credentials.to_json())
+
     message = EmailMessage()
     message["Subject"] = f"Weekly job-search digest — {digest.week_start:%b %d, %Y}"
     message["From"] = sender
     message["To"] = recipient
     message.set_content(render_digest_markdown(digest))
+    raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
 
-    with smtplib.SMTP(smtp_host, int(smtp_port), timeout=30) as smtp:
-        if use_starttls:
-            smtp.starttls()
-        if smtp_username:
-            smtp.login(smtp_username, smtp_password)
-        smtp.send_message(message)
+    try:
+        service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
+        return service.users().messages().send(
+            userId="me", body={"raw": raw_message}
+        ).execute()
+    except (HttpError, HttpLib2Error, OSError) as exc:
+        raise RuntimeError(f"Gmail API send failed: {exc}") from exc

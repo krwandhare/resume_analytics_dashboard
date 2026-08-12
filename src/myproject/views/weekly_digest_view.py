@@ -58,5 +58,5 @@ def render_weekly_digest_view(
 
     st.caption(
         "Automated email delivery is available through the repository's weekly workflow "
-        "after SMTP and Supabase secrets are configured."
+        "after Gmail OAuth and Supabase access are configured."
     )

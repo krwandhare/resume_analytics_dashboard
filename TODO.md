@@ -16,7 +16,7 @@
 - None.
 
 ## Completed
-- [x] Added an automated weekly analytics digest with week-over-week metrics, dashboard preview/download, SMTP delivery, and a private local Monday `launchd` schedule.
+- [x] Added an automated weekly analytics digest with week-over-week metrics, dashboard preview/download, Gmail API OAuth delivery, and a private local Monday `launchd` schedule.
 - [x] Expanded the pipeline status vocabulary, centralized canonical labels/colors, and excluded pre-application records from application conversion metrics.
 - [x] Added the Discovered Jobs review queue with filtering, promotion, dismissal, and bounded cached Supabase loading.
 - [x] Added interactive "➕ Add New Job Application" collapsible form directly in dashboard UI (`src/myproject/components/add_job_form.py`, `tests/test_add_job_form.py`).
