@@ -26,6 +26,7 @@ __pycache__/
 .streamlit/secrets.toml
 
 # Local artifacts
+.local/
 schema_snapshot.json
 *.log
 .DS_Store

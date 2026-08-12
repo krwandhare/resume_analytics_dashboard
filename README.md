@@ -43,24 +43,22 @@ A Streamlit-based dashboard for visualizing and analyzing job application data s
     streamlit run src/myproject/main.py
     ```
 
-## Weekly email delivery
+## Private weekly email delivery
 
-The `Weekly analytics digest` GitHub Actions workflow runs every Monday at 13:00 UTC and can also be triggered manually. Configure these repository secrets before enabling it:
+Weekly email delivery runs locally through macOS `launchd`. Supabase, SMTP, and recipient credentials remain in the ignored local `.env` file and are never uploaded to GitHub variables or Actions secrets.
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `SMTP_HOST`, `SMTP_USERNAME`, and `SMTP_PASSWORD`
-- `WEEKLY_DIGEST_FROM` and `WEEKLY_DIGEST_TO`
-- `SMTP_PORT` (optional; defaults to `587`)
-
-Set the repository variable `SMTP_STARTTLS` to `false` only when the mail server explicitly requires an unencrypted SMTP connection. The same delivery can be tested locally without committing credentials:
+Test delivery locally with:
 
 ```bash
-python scripts/send_weekly_digest.py
+.venv/bin/python scripts/send_weekly_digest.py
 ```
+
+See [Private weekly digest automation](docs/weekly-digest.md) for credential requirements, scheduler installation, verification, logs, and removal.
 
 ## Project Structure
 
 - `src/myproject/main.py`: Main Streamlit application entry point.
 - `src/myproject/analytics.py`: Visualization logic using Plotly.
+- `src/myproject/weekly_digest.py`: Weekly summary generation and SMTP delivery.
+- `scripts/send_weekly_digest.py`: Local scheduled-delivery entry point.
 - `inspect_db.py`: Utility script for database inspection.
