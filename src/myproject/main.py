@@ -29,6 +29,7 @@ from myproject.views import (
     render_ats_scorer_view,
     render_admin_tools_view,
     render_discovered_jobs_view,
+    render_weekly_digest_view,
 )
 
 def main():
@@ -269,9 +270,10 @@ button:hover, [data-testid*="baseButton"]:hover {
         st.caption(f"🟡 {status_msg}")
 
     # Tabs navigation setup
-    tab_overview, tab_tracker, tab_discovered, tab_ats, tab_admin = st.tabs([
+    tab_overview, tab_tracker, tab_digest, tab_discovered, tab_ats, tab_admin = st.tabs([
         "📊 Overview & Analytics",
         "📝 Job Tracker & Applications",
+        "📅 Weekly Digest",
         "🔭 Discovered Jobs",
         "🎯 ATS Scorer",
         "⚙️ Admin & Tools"
@@ -282,6 +284,9 @@ button:hover, [data-testid*="baseButton"]:hover {
 
     with tab_tracker:
         render_job_tracker_view(filtered_data, apps_df)
+
+    with tab_digest:
+        render_weekly_digest_view(job_data, apps_df, events_df)
 
     with tab_discovered:
         render_discovered_jobs_view(discovered_df)

@@ -14,6 +14,7 @@ from .job_tracker import render_job_tracker_view
 from .ats_scorer import render_ats_scorer_view
 from .admin_tools import render_admin_tools_view
 from .discovered_jobs_view import render_discovered_jobs_view
+from .weekly_digest_view import render_weekly_digest_view
 
 __all__ = [
     "render_overview_analytics_view",
@@ -21,4 +22,5 @@ __all__ = [
     "render_ats_scorer_view",
     "render_admin_tools_view",
     "render_discovered_jobs_view",
+    "render_weekly_digest_view",
 ]
