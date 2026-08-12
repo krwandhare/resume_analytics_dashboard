@@ -6,17 +6,26 @@
 - Core logic resides in `src/myproject/`.
 
 ## Current Status
-- Robust data engine & component architecture implemented.
-- Automatic fallback demo dataset active when Supabase environment variables are missing/unconfigured.
+- Robust data engine and component architecture implemented.
+- Automatic fallback demo dataset active when Supabase environment variables are missing or unconfigured.
+- Weekly digest generation, dashboard preview/download, and Gmail API OAuth delivery are implemented and locally validated.
+- Validation baseline: 62 tests passed; Python compilation, diff checks, and the no-email Streamlit smoke test passed.
+- Feature commit `12199b8` is on `feature/claude-private-gmail-digest`; it has not been pushed and no pull request exists yet.
 
 ## Next Tasks
-- None (All core features & integrations active and verified)
+- [ ] Rotate the Supabase service-role credential exposed in earlier verbose test output; update the ignored local `.env` and revoke the old credential.
+- [ ] Review HTTP/client logging so Supabase credentials and authorization headers cannot appear in test or runtime output.
+- [ ] Push `feature/claude-private-gmail-digest` and open a pull request after confirming the remote target.
+- [ ] Configure the ignored local Gmail sender/recipient values and authorize the send-only desktop OAuth client.
+- [ ] Review the generated digest and perform one explicitly authorized live email delivery test.
+- [ ] Install and verify the Monday macOS `launchd` schedule only after the live delivery test succeeds.
 
 ## Backlog
-- None.
+- [ ] Replace deprecated PyPDF2 usage with `pypdf`.
+- [ ] Update Supabase client configuration to stop using deprecated `timeout` and `verify` parameters.
 
 ## Completed
-- [x] Added an automated weekly analytics digest with week-over-week metrics, dashboard preview/download, Gmail API OAuth delivery, and a private local Monday `launchd` schedule.
+- [x] Added an automated weekly analytics digest with week-over-week metrics, dashboard preview/download, Gmail API OAuth delivery, and a template for a private local Monday `launchd` schedule.
 - [x] Expanded the pipeline status vocabulary, centralized canonical labels/colors, and excluded pre-application records from application conversion metrics.
 - [x] Added the Discovered Jobs review queue with filtering, promotion, dismissal, and bounded cached Supabase loading.
 - [x] Added interactive "➕ Add New Job Application" collapsible form directly in dashboard UI (`src/myproject/components/add_job_form.py`, `tests/test_add_job_form.py`).
